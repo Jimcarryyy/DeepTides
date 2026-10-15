@@ -3,15 +3,55 @@
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
-      "$path": "src/ReplicatedStorage"
+      "$className": "ReplicatedStorage",
+      "Config": {
+        "$path": "src/ReplicatedStorage/Config"
+      },
+      "Modules": {
+        "$path": "src/ReplicatedStorage/Modules"
+      },
+      "Remotes": {
+        "$className": "Folder",
+        "OxygenUpdate": {
+          "$className": "RemoteEvent"
+        },
+        "PlayerDataUpdate": {
+          "$className": "RemoteEvent"
+        },
+        "SellResult": {
+          "$className": "RemoteEvent"
+        }
+      }
     },
     "ServerScriptService": {
-      "$path": "src/ServerScriptService"
+      "$className": "ServerScriptService",
+      "Core": {
+        "$path": "src/ServerScriptService/Core"
+      },
+      "Libs": {
+        "$path": "src/ServerScriptService/Libs"
+      }
     },
     "StarterPlayer": {
       "$className": "StarterPlayer",
       "StarterPlayerScripts": {
-        "$path": "src/StarterPlayer/StarterPlayerScripts"
+        "$className": "StarterPlayerScripts",
+        "Controllers": {
+          "$path": "src/StarterPlayer/StarterPlayerScripts/Controllers"
+        }
+      }
+    },
+    "Workspace": {
+      "$className": "Workspace",
+      "$keepUnknowns": true,
+      "DockArea": {
+        "$className": "Folder"
+      },
+      "LootSpawns": {
+        "$className": "Folder"
+      },
+      "Zones": {
+        "$className": "Folder"
       }
     }
   }

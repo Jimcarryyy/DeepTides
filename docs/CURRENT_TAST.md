@@ -1,42 +1,20 @@
-# Current Task: Milestone 1 Setup & Core Demo Loop
+# Current Task: Milestone 1 Demo Review & Polish
 
 ## Goal
-Establish project foundation and deliver a playable Milestone 1 demo: Surface dock, Zone 1 (Shallow Reef), functional oxygen drain/refill, collectible loot, loot bag inventory, dock selling station, basic HUD (Pearls + Oxygen), and data persistence.
+Final review and polish of the Milestone 1 playable demo before client submission for the $186 AUD payout.
 
-## Task Breakdown
-- [ ] **Step 0: Workspace & Folder Structure**
-  - [ ] Set up project directory tree for Argon sync.
-  - [ ] Run initial setup script in Command Bar to establish folders in ReplicatedStorage, ServerScriptService, StarterGui.
-- [ ] **Step 1: Core Data Framework**
-  - [ ] Integrate ProfileService.
-  - [ ] Create `PlayerDataManager` (handles Pearls, Gear Levels, Bag contents).
-- [ ] **Step 2: Configuration Modules**
-  - [ ] Create `LootConfig` (Zone 1 items, values, weights).
-  - [ ] Create `GearConfig` (Base tank capacity, base bag size).
-  - [ ] Create `ZoneConfig` (Zone 1 depth boundary).
-- [ ] **Step 3: Oxygen System**
-  - [ ] Server-side oxygen manager (drains when submerged below water line, refills at surface/dock).
-  - [ ] Oxygen replication to client.
-- [ ] **Step 4: Loot Spawning & Collection**
-  - [ ] Zone 1 loot spawner (server-authoritative item placement using CollectionService).
-  - [ ] Proximity / touch collection logic checking bag capacity.
-- [ ] **Step 5: Surface Dock & Sell Station**
-  - [ ] Dock sell zone (ProximityPrompt or Touched event).
-  - [ ] Transaction logic: clears bag, credits Pearls via `PlayerDataManager`.
-- [ ] **Step 6: Demo UI (Clean & Polished)**
-  - [ ] Oxygen gauge / bar (StarterGui).
-  - [ ] Pearls balance & Loot bag capacity counter (StarterGui).
-  - [ ] Sell summary notification.
-- [ ] **Step 7: Environment & Assistant Prompts**
-  - [ ] Generate basic dock model + Zone 1 reef props via Studio Assistant.
-  - [ ] Lighting & underwater atmosphere settings (WaterColor, Fog/Atmosphere).
+## Milestone 1 Status: COMPLETED
+- [x] **Step 0: Workspace & Folder Structure** (Studio + Argon configured)
+- [x] **Step 1: Core Data Framework** (ProfileService + PlayerDataManager saving Pearls)
+- [x] **Step 2: Configuration Modules** (ZoneConfig, GearConfig, LootConfig)
+- [x] **Step 3: Oxygen System** (Server drain/refill, drowning damage, live HUD countdown)
+- [x] **Step 4: Zone 1 Loot Spawning & Collection** (Dynamic spawner, distinct low-poly drops, bag limits)
+- [x] **Step 5: Surface Dock & Sell Station** (Sell pad, transactional inventory clearing, pearl rewards)
+- [x] **Step 6: Demo UI** (StarterGui MainHUD, Pearls/Bag pill stack, Oxygen gauge, Sell toast)
+- [x] **Step 7: Environment** (Low-poly circular atoll hub with central diving lagoon)
 
-## Blockers
-- Awaiting initial approval to begin Step 0.
-
-## Definition of Done (Milestone 1 Demo)
-1. Player spawns at dock, displays 0 Pearls and full Oxygen.
-2. Player jumps into water; oxygen drains steadily.
-3. Player swims down to Zone 1, interacts with loot items until bag is full.
-4. Player surfaces at dock; oxygen refills.
-5. Player steps onto sell area; loot bag empties, Pearls update on UI and save to ProfileService.
+## Next Milestone (Milestone 2 - $217 AUD)
+- Full Zones 2 & 3 expansion (Kelp Forest, Sunken Shipwreck).
+- Creature AI via PathfindingService (Jellyfish, Electric Eel, Hammerhead Shark).
+- Gear Upgrade Shop (Oxygen Tank, Loot Bag, Speed Fins tiers).
+- Basic PvP Opt-in system.
