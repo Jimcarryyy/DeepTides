@@ -37,23 +37,40 @@ local function spawnLootItem(spawnNode: BasePart)
 	if nodeOccupied[spawnNode] then return end
 	nodeOccupied[spawnNode] = true
 
-	local lootData = LootConfig.RollZone1Loot()
-	local templateModel = LootModelsFolder and LootModelsFolder:FindFirstChild(lootData.Id) :: Model?
+	local zoneId = spawnNode:GetAttribute("ZoneId") or 1
+	local lootData = LootConfig.RollLootForZone(zoneId :: number)
 
+	local templateModel = LootModelsFolder and LootModelsFolder:FindFirstChild(lootData.Id) :: Model?
 	local lootModel: Model
+
 	if templateModel then
 		lootModel = templateModel:Clone()
 	else
+		-- Built-in studded 3D model generator for new zone items
 		lootModel = Instance.new("Model")
 		lootModel.Name = lootData.Id
+
 		local p = Instance.new("Part")
 		p.Name = "Hitbox"
-		p.Size = Vector3.new(1.8, 1.4, 1.8)
-		p.Color = lootData.Color
 		p.Material = Enum.Material.Plastic
 		p.TopSurface = Enum.SurfaceType.Studs
+		p.Color = lootData.Color
 		p.Anchored = true
 		p.CanCollide = false
+
+		if lootData.Id:match("kelp") then
+			p.Size = Vector3.new(1.2, 3.2, 1.2)
+		elseif lootData.Id:match("gold") then
+			p.Size = Vector3.new(2.4, 0.8, 1.4)
+		elseif lootData.Id:match("cutlass") then
+			p.Size = Vector3.new(0.4, 3.4, 0.8)
+		elseif lootData.Id:match("skull") then
+			p.Shape = Enum.PartType.Ball
+			p.Size = Vector3.new(2.0, 2.0, 2.0)
+		else
+			p.Size = Vector3.new(2.0, 1.4, 2.0)
+		end
+
 		p.Parent = lootModel
 		lootModel.PrimaryPart = p
 	end
@@ -108,7 +125,6 @@ local function spawnLootItem(spawnNode: BasePart)
 			lootModel:Destroy()
 			nodeOccupied[spawnNode] = false
 
-			-- Notify client of collected item
 			NotifyClient:FireClient(player, string.format("+ %s (+%d Pearls)", lootData.Name, lootData.BaseValue), "Info", "✨")
 
 			task.delay(RESPAWN_TIME, function()
@@ -117,7 +133,6 @@ local function spawnLootItem(spawnNode: BasePart)
 				end
 			end)
 		else
-			-- Notify client bag is full
 			local cap = PlayerDataManager.GetBagCapacity(player)
 			NotifyClient:FireClient(player, string.format("Bag Full! (%d/%d) Sell at the Dock.", cap, cap), "Warning", "🎒")
 			prompt.ObjectText = "[BAG FULL! Sell at Dock]"
@@ -141,4 +156,4 @@ for _, child in ipairs(LootSpawnsFolder:GetChildren()) do
 end
 LootSpawnsFolder.ChildAdded:Connect(checkNode)
 
-print("[Deep Tides] LootServer: Notifications active.")
+print("[Deep Tides] LootServer: Multi-zone drops active across Zones 1, 2, and 3.")

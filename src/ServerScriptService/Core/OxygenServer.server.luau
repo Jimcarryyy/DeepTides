@@ -10,6 +10,7 @@ local PlayerDataManager = require(ServerScriptService.Core.PlayerDataManager)
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local OxygenUpdate = Remotes:WaitForChild("OxygenUpdate") :: RemoteEvent
+local NotifyClient = Remotes:WaitForChild("NotifyClient") :: RemoteEvent
 
 type PlayerOxygenState = {
 	Current: number,
@@ -18,11 +19,11 @@ type PlayerOxygenState = {
 	RefillRate: number,
 	IsSubmerged: boolean,
 	LastDrownTick: number,
+	LastPressureTick: number,
 }
 
 local playerStates: { [Player]: PlayerOxygenState } = {}
 
--- Initialize oxygen state when character spawns
 local function onCharacterAdded(player: Player, character: Model)
 	local humanoid = character:WaitForChild("Humanoid") :: Humanoid
 	local tankTier = PlayerDataManager.GetTankTier(player)
@@ -35,9 +36,9 @@ local function onCharacterAdded(player: Player, character: Model)
 		RefillRate = tankConfig.RefillRate,
 		IsSubmerged = false,
 		LastDrownTick = os.clock(),
+		LastPressureTick = os.clock(),
 	}
 
-	-- Immediate initial replication
 	OxygenUpdate:FireClient(player, playerStates[player].Current, playerStates[player].Max, false)
 
 	humanoid.Died:Connect(function()
@@ -69,8 +70,8 @@ for _, player in ipairs(Players:GetPlayers()) do
 	task.spawn(onPlayerAdded, player)
 end
 
--- Server Heartbeat loop for accurate timing
-local SYNC_INTERVAL = 0.25 -- Sync to client 4 times per second (smooth & bandwidth friendly)
+-- Server Heartbeat loop
+local SYNC_INTERVAL = 0.25
 local timeSinceLastSync = 0
 
 RunService.Heartbeat:Connect(function(dt: number)
@@ -86,7 +87,21 @@ RunService.Heartbeat:Connect(function(dt: number)
 
 		if not humanoid or humanoid.Health <= 0 or not hrp then continue end
 
-		-- Check submergence: below configured water surface Y OR actively swimming
+		-- 1. LIVE TANK SYNC (Reflects shop upgrades immediately without respawning)
+		local currentTankTier = PlayerDataManager.GetTankTier(player)
+		local currentSuitTier = PlayerDataManager.GetSuitTier(player)
+		local tankConfig = GearConfig.OxygenTanks[currentTankTier] or GearConfig.OxygenTanks[1]
+
+		if state.Max ~= tankConfig.MaxOxygen then
+			state.Max = tankConfig.MaxOxygen
+			state.DrainRate = tankConfig.DrainRate
+			state.RefillRate = tankConfig.RefillRate
+			if not state.IsSubmerged then
+				state.Current = state.Max
+			end
+		end
+
+		-- 2. Submergence Detection
 		local isSwimming = humanoid:GetState() == Enum.HumanoidStateType.Swimming
 		local isBelowSurface = hrp.Position.Y < ZoneConfig.WATER_SURFACE_Y
 		local isSubmerged = isSwimming or isBelowSurface
@@ -94,14 +109,29 @@ RunService.Heartbeat:Connect(function(dt: number)
 		state.IsSubmerged = isSubmerged
 
 		if isSubmerged then
-			-- Drain oxygen
-			state.Current = math.max(0, state.Current - (state.DrainRate * dt))
+			local currentZone = ZoneConfig.GetZoneAtDepth(hrp.Position.Y)
+			local drainMultiplier = if currentZone then currentZone.OxygenDrainMultiplier else 1.0
 
-			-- Drowning damage if out of oxygen
+			-- Drain oxygen
+			state.Current = math.max(0, state.Current - (state.DrainRate * drainMultiplier * dt))
+
+			-- Drowning Damage (out of oxygen)
 			if state.Current <= 0 then
 				if os.clock() - state.LastDrownTick >= 1 then
 					state.LastDrownTick = os.clock()
-					humanoid:TakeDamage(10) -- 10 damage/second drowning
+					humanoid:TakeDamage(10)
+				end
+			end
+
+			-- 3. DEPTH PRESSURE HAZARD (Suit Tier Protection)
+			local isCrushing, pressureDmg, pressureMsg = ZoneConfig.CheckPressureHazard(hrp.Position.Y, currentSuitTier)
+			if isCrushing then
+				if os.clock() - state.LastPressureTick >= 1.5 then
+					state.LastPressureTick = os.clock()
+					humanoid:TakeDamage(pressureDmg)
+					if pressureMsg then
+						NotifyClient:FireClient(player, pressureMsg, "Warning", "⚠️")
+					end
 				end
 			end
 		else
@@ -109,7 +139,7 @@ RunService.Heartbeat:Connect(function(dt: number)
 			state.Current = math.min(state.Max, state.Current + (state.RefillRate * dt))
 		end
 
-		-- Periodic client sync
+		-- Sync to client HUD
 		if shouldSync then
 			OxygenUpdate:FireClient(player, math.round(state.Current * 10) / 10, state.Max, state.IsSubmerged)
 		end
@@ -120,4 +150,4 @@ RunService.Heartbeat:Connect(function(dt: number)
 	end
 end)
 
-print("[Deep Tides] OxygenServer started successfully.")
+print("[Deep Tides] OxygenServer: Live 120s Tank & Depth Pressure Hazards active.")

@@ -83,7 +83,11 @@ local function setupSellStation(station: Instance)
 end
 
 local function checkDock()
-	local stall = DockArea:FindFirstChild("SellStation") or DockArea:FindFirstChild("SellPad")
+	local stall = DockArea:FindFirstChild("SellShop") 
+		or DockArea:FindFirstChild("SellStation") 
+		or DockArea:FindFirstChild("SellPad")
+		or Workspace:FindFirstChild("SellShop")
+
 	if stall then
 		setupSellStation(stall)
 	end
@@ -91,7 +95,7 @@ end
 
 checkDock()
 DockArea.ChildAdded:Connect(function(child)
-	if child.Name == "SellStation" or child.Name == "SellPad" then
+	if child.Name == "SellShop" or child.Name == "SellStation" or child.Name == "SellPad" then
 		task.defer(setupSellStation, child)
 	end
 end)
