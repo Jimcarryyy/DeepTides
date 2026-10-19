@@ -5,8 +5,8 @@
 - **Tagline:** "Dive deep. Find rare. Get home alive."
 - **Platforms:** PC, Mobile, Console (Cross-platform controls active)
 - **Client:** Lemar Bentley (Confidential)
-- **Target Account:** DeepTidesDev
-- **Budget & Terms:** $620 AUD across 3 Milestones (M1: $186, M2: $217, M3: $217)
+- **Publishing Account:** DeepTidesDev
+- **Initial Contract:** $620 AUD across 3 Milestones (M1: $186, M2: $217, M3: $217)
 - **Visual References:** *Steal an Egg* (UI, creatures), *Catch and Tame* (environment), *Grow a Garden* (UI cleanliness).
 
 ---
@@ -54,7 +54,7 @@ Each category features 5 upgrade tiers:
   - T5: Leviathan Gliders (2.50x speed, 9,000 ⚪)
 - **Diving Suits:**
   - T1: Wetsuit (Safe to -60 studs, Perk: None, 0 ⚪)
-  - T2: Kelp Diver Suit (Safe to -140 studs, Perk: Speed Surge, 1,000 ⚪)
+  - T2: Kelp Diver Suit (Safe to -140 studs, Perk: Speed Surge +150% speed, 1,000 ⚪)
   - T3: Armored Abyss Suit (Safe to -240 studs, Perk: Iron Skin 60% Shield, 3,000 ⚪)
   - T4: Thermal Trench Suit (Safe to -400 studs, Perk: Thermal Barrier 70% Shield, 7,000 ⚪)
   - T5: Cursed Leviathan Suit (Safe to -600 studs, Perk: Leviathan Aura 80% Shield + 2x Speed, 15,000 ⚪)
@@ -72,7 +72,7 @@ Each category features 5 upgrade tiers:
 - **Max Rank:** 10 (Rank I to Rank X).
 - **Reset:** All gear resets to Tier 1, bag is cleared.
 - **Permanent Buffs:** +10% Pearl sell value per Prestige rank, +5% swim/walk speed per Prestige rank.
-- **Cosmetic:** Overhead nameplate BillboardGui badge displaying `★ PRESTIGE {Roman} ★`.
+- **Cosmetic:** Overhead clean text tag displaying `PRESTIGE {Roman}`.
 
 ---
 
@@ -84,8 +84,8 @@ Each category features 5 upgrade tiers:
 - **Developer Products:**
   - `StarterPack` (99 R$): 500 Pearls + 1 Uncommon drop + 1 Emergency Oxygen.
   - `EmergencyOxygen` (49 R$): Instantly refills oxygen tank to 100% mid-dive.
-  - `ReviveToken` (99 R$): Recovers lost bag dropped during PvP defeat.
+  - `ReviveToken` (99 R$): Recovers lost bag dropped during PvP defeat within 30-second window.
   - `LootMagnet` (49 R$): 2x collection reach for the current dive.
   - `RareDive` (149 R$): Guarantees Rare+ drop on next pickup.
-- **UX Compliance:** Automatic pop-up for Emergency Oxygen triggers within 2 seconds of reaching critical oxygen (<= 8s).
-- **Studio Support:** `MonetizationConfig.TEST_MODE = true` allows in-Studio purchase testing via `TestBuyProduct` without spending Robux.
+- **UX Compliance:** Automatic pop-up for Emergency Oxygen triggers within 2s of critical oxygen (<= 8s). Automatic pop-up for Revive Token triggers within 2s of PvP defeat.
+- **Studio Support:** `MonetizationConfig.TEST_MODE = true` allows in-Studio purchase testing without spending real Robux.

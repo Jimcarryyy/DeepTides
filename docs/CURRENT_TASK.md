@@ -2,40 +2,36 @@
 
 ### 3. `docs/CURRENT_TASK.md`
 
-*(Note: Replace `docs/CURRENT_TAST.md` with this file to fix the repo file name typo)*
-
 ```markdown
-# Current Task: Milestone 1–3 Integration Verification & Bug Fixes
+# Current Task: Milestone 1–3 Complete & Client Review
 
 ## Goal
-Verify all features implemented across Milestones 1 to 3 in Roblox Studio, patch discovered logic gaps in the codebase, and finalize the complete game loop for client sign-off.
+Milestones 1 to 3 are fully implemented, debugged, and verified in Roblox Studio. Prepare the demo for client review (Lemar Bentley), confirm milestone sign-off, and establish Contract 2 ($660 AUD) for the final art and polish phase.
 
 ---
 
-## Codebase Status: Milestones 1–3 Implemented
-- [x] **Milestone 1:** Core loop, Zone 1 Shallow Reef, Oxygen system, Loot Bag collection, Dock selling, ProfileService persistence, Main HUD.
+## Completed Tasks (Milestones 1 to 3)
+- [x] **Milestone 1:** Surface dock, Zone 1 Shallow Reef, Oxygen depletion loop, Loot collection, Dock sell station, ProfileService persistence, Main HUD.
 - [x] **Milestone 2:** Zones 2 & 3 (Kelp Forest, Shipwreck), 5-Tier Gear Upgrade Shop, Creature AI (Jellyfish, Eel, Shark), Tool combat.
-- [x] **Milestone 3:** Zones 4 & 5 (Abyss, Cursed Deep), World Boss (The Leviathan), Treasure Vault, Opt-in PvP system with suit abilities and dodge dash, Prestige system (10 ranks), Full Monetisation suite with auto-prompts.
+- [x] **Milestone 3:** Zones 4 & 5 (Abyss, Cursed Deep), World Boss (The Leviathan) + Golden Vault, Opt-in PvP system, Suit abilities, Underwater Dodge Dash, Prestige system (Rank X), Full Monetisation suite with 2s automatic prompts.
+- [x] **Integration & Bug Fixes:**
+  - Connected `LootMagnetActive` attribute for double pickup reach.
+  - Connected `GuaranteedRare` drop upgrade and resolved loot pool indexing error.
+  - Resolved DataStore serialization failure by sanitizing loot items to clean primitives.
+  - Implemented physical seabed loot bag dropping upon PvP defeat.
+  - Implemented anti-duplication safeguard for Revive Tokens (`HideRevivePrompt`).
+  - Implemented PvE death loot loss so drowning and creature deaths have real stakes.
+  - Created pre-built `AutoRevivePrompt` in `StarterGui.MainHUD` with uniform styling.
+  - Set `MainHUD.ResetOnSpawn = false` to preserve HUD references across deaths.
+  - Shortened Gear Shop modal labels to eliminate button overlap.
+  - Gated the Leviathan boss bar to Zone 5 (`Y <= -400 studs`).
+  - Added Prestige Rank X button lockout.
+  - Converted overhead badges (`PVP` and `PRESTIGE X`) to clean, text-only floating tags.
+  - Fixed Electric Eel and Giant Octopus status effects to cleanly restore gear speed via `PlayerDataManager.ResetWalkSpeed()`.
 
 ---
 
-## Active Tasks / Fixes Required (Based on Code Audit)
-- [ ] **Fix 1: Hook Loot Magnet Dev Product in `LootServer.server.luau`**
-  - Check `char:GetAttribute("LootMagnetActive")` to double `MAX_COLLECT_DISTANCE` and ProximityPrompt distance.
-- [ ] **Fix 2: Hook Guaranteed Rare Drop in `LootServer.server.luau`**
-  - Read `player:GetAttribute("GuaranteedRare")` during collection and override rolled item rarity if active.
-- [ ] **Fix 3: Complete PvP Loot Bag Drop & Revive Token Hook**
-  - In `ServerInit.server.luau`, detect when a PvP player is killed by another player underwater.
-  - Drop their loot bag into `Workspace.ActiveLoot`, store `LastDroppedLoot` attribute for the 30s Revive Token window.
-- [ ] **Fix 4: Add Auto-Prompt for Revive Token to `UIController.client.luau`**
-  - Show 2-second automatic purchase modal upon PvP defeat.
-- [ ] **Fix 5: File Rename Cleanup**
-  - Rename `src/ServerScriptService/Core/SellSever.server.luau` to `SellServer.server.luau`.
-  - Delete obsolete `docs/CURRENT_TAST.md` in favor of `docs/CURRENT_TASK.md`.
-- [ ] **Fix 6: End-to-End Studio Smoke Test**
-  - Test all 5 zones, boss fight, prestige reset, and purchase simulation in Studio.
-
----
-
-## What "Done" Looks Like
-All 3 milestones fully playable without console warnings or dead attributes, verified in Studio, and ready for client delivery and payout.
+## Next Steps
+1. **Client Review:** Lemar tests Milestone 3 and signs off on completion.
+2. **Milestone 3 Payout:** Release of Milestone 3 payment ($186 AUD).
+3. **Setup Contract 2 ($660 AUD):** Final commercial polish contract covering custom 3D models (dock, creatures, tools), UI/UX art overhaul, water VFX, lighting, and audio design.

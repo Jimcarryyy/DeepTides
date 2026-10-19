@@ -2,45 +2,64 @@
 
 All notable changes to the Deep Tides project are documented in this file.
 
-## [0.3.0] - 2026-10-20 (Milestone 1–3 Full Codebase Delivery)
+## [0.3.3] - 2026-10-20
+### Fixed
+- **Status Effect Speed Recovery:** Fixed Electric Eel stun (1.2s) and Giant Octopus ink slow (2.5s) in `CreatureServer` restoring hardcoded `16` speed; implemented `PlayerDataManager.GetDefaultWalkSpeed()` and `PlayerDataManager.ResetWalkSpeed()` to dynamically restore 100% of player Speed Fins and Prestige multipliers.
+- **DataStore Userdata Crash:** Resolved `CantStoreValue: Cannot store in data store` error in `PlayerDataManager` by sanitizing loot items to primitive data types before saving, stripping `Color3` userdata.
+- **UI Label Overlap:** Shortened Gear Shop modal text strings (`Tier X: Name` and `Current ➔ Next`) in `UIController` so labels fit cleanly without colliding with upgrade buttons.
+- **Boss Bar Gating:** Restricted Leviathan boss bar visibility in `UIController` to Zone 5 (`Y <= -400 studs`), preventing the boss bar from displaying on the surface dock.
+- **Prestige Button Boundary:** Grayed out and locked the Prestige Shrine action button at Rank X (`PrestigeLevel >= 10`).
+- **Clean Overhead Badges:** Converted Prestige and PvP overhead displays into clean, frameless, text-only floating tags.
+
+---
+
+## [0.3.2] - 2026-10-20
 ### Added
-- **Zone 4 & 5 Expansion:** Added "The Abyss" (-240 to -400 studs) and "The Cursed Deep" (-400 to -600 studs) with extreme pressure hazards and custom water tinting.
-- **The Leviathan World Raid Boss:** 1,500 HP raid boss in Zone 5 with animated boss health bar, undulation AI, and seafloor golden Treasure Vault rewarding +5,000 Pearls on defeat.
-- **Hostile Ecosystem AI:** Giant Octopus (ink cloud blind / -50% speed), Hammerhead Shark (fast pursuit), Electric Eel (electric stun), and ambient Jellyfish.
-- **Opt-in PvP Engine:** Surface dock PvP station toggle, overhead billboard indicators, directional underwater Dodge Dash (Space/Shift/ButtonB), and weapon swing combat.
-- **Suit Special Abilities:**
-  - Tier 2: Speed Surge (+150% swim speed for 4s).
-  - Tier 3: Iron Skin (-60% damage reduction for 6s).
-  - Tier 4: Thermal Barrier (-70% damage reduction for 7s).
-  - Tier 5: Leviathan Aura (-80% shield + 2x speed for 8s).
-- **Prestige System:** Unlocked at all Tier 5 gear + 50,000 Pearls. Resets gear for +10% Pearl value and +5% speed per rank up to Rank X with overhead prestige crests.
-- **Monetisation Engine:**
-  - MarketplaceService `ProcessReceipt` and `PromptGamePassPurchaseFinished`.
-  - Game passes: Deep Diver (2x oxygen), Treasure Hunter (+25% sell value, +1 slot), Leviathan Pass (Zone 5 pressure immunity).
-  - Dev Products: Starter Pack, Emergency Oxygen, Revive Token, Loot Magnet, Rare Dive.
-  - Studio Test Mode toggle (`MonetizationConfig.TEST_MODE`) via `TestBuyProduct` remote.
-  - Hard UX 2-second auto-prompt on critical oxygen (<= 8s).
-- **Dynamic Scrolling Frames:** Automatic `CanvasSize` binding based on `UIListLayout.AbsoluteContentSize` in `UIController`.
+- **AutoRevivePrompt:** Added pre-built `AutoRevivePrompt` in `StarterGui.MainHUD` matching the exact `380x72` geometry, fonts, and colors of `AutoOxygenPrompt`.
+- **Anti-Dupe PvP Revive Race:** Added `HideRevivePrompt` RemoteEvent. When a dropped bag is stolen, the victim's revive prompt auto-closes to prevent item duplication.
+- **PvE Death Loot Loss:** Submerged deaths in PvE mode now clear the player's loot bag, making Oxygen Tanks and Emergency Oxygen meaningful.
 
 ### Fixed
-- Stabilized tool equipping logic to eliminate unhandled tool state replication.
-- Added dynamic pressure hazard calculations preventing depth exploits.
+- Set `MainHUD.ResetOnSpawn = false` to prevent character respawns from destroying GUI references.
+- Resolved line 134 `nil[zoneId]` indexing error in `LootServer` via `zoneLootMap`.
 
 ---
 
-## [0.2.0] - 2026-10-18 (Milestone 2 Expansion)
+## [0.3.1] - 2026-10-20
 ### Added
-- 5-Tier Gear Upgrade Shop (`GearShopModal`) supporting Oxygen Tanks, Loot Bags, Speed Fins, Diving Suits, and Diving Tools.
-- Surface dock Gear Shop station with interactive ProximityPrompt.
-- Underwater combat damage calculation against wildlife using equipped Diving Tools.
-- Zone 2 & Zone 3 loot items (Glowing Kelp Bulb, Giant Pearl Oyster, Galleon Gold Ingot, Captain's Cutlass, etc.).
+- Connected `LootMagnetActive` attribute in `LootServer` to double pickup reach (up to 36 studs).
+- Connected `GuaranteedRare` dev product in `LootServer` to upgrade drops to Rare+ with toast feedback.
+- Implemented physical seabed loot bag drop on PvP defeat in `ServerInit`.
+
+### Fixed
+- Renamed `SellSever.server.luau` to `SellServer.server.luau`.
+- Renamed `docs/CURRENT_TAST.md` to `docs/CURRENT_TASK.md`.
 
 ---
 
-## [0.1.0] - 2026-10-16 (Milestone 1 Core Loop)
+## [0.3.0] - 2026-10-20
 ### Added
-- Initial server-authoritative oxygen depletion loop and surface dock refill.
-- Zone 1 Shallow Reef loot spawning (Sea Shell, Starfish, Rusty Coin, Barnacled Chest).
-- ProfileService session-locking persistence for Pearls and gear data.
-- Surface dock sell station with Pearl awards and notification toast alerts.
-- Basic MainHUD with Pearls counter, Bag counter, and Oxygen meter.
+- **Milestone 3 Endgame:** Added Zone 4 (The Abyss) and Zone 5 (The Cursed Deep).
+- **The Leviathan Boss:** 1,500 HP world raid boss in Zone 5, with animated boss health bar and seabed Golden Treasure Vault (+5,000 Pearls).
+- **Opt-in PvP Engine:** Dock station toggle, weapon damage, directional underwater Dodge Dash, and Suit Abilities (Speed Surge, Iron Skin, Thermal Barrier, Leviathan Aura).
+- **Prestige System:** 50,000 Pearls reset requiring all Tier 5 gear, granting permanent +10% sell value and +5% speed per rank up to Rank X.
+- **Monetisation Engine:** MarketplaceService validation, Game Passes, Dev Products, and 2-second automatic emergency prompts.
+
+---
+
+## [0.2.0] - 2026-10-18
+### Added
+- **Milestone 2 Expansion:** Zones 2 (Kelp Forest) & 3 (Shipwreck) with crushing depth pressure hazards.
+- 5-Category / 5-Tier Gear Upgrade Shop with interactive dock ProximityPrompt.
+- Wildlife AI: Jellyfish sting, Electric Eel stun, and Hammerhead Shark pursuit.
+- Diving Tool weapon damage against creatures.
+
+---
+
+## [0.1.0] - 2026-10-16
+### Added
+- **Milestone 1 Core Loop:** Server-authoritative oxygen depletion loop and dock refill.
+- Zone 1 Shallow Reef loot spawning and collection.
+- Surface dock sell station with Pearl currency crediting.
+- ProfileService session-locking persistence.
+- MainHUD with Pearls counter, Bag counter, and Oxygen meter.

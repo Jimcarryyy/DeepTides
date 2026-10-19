@@ -77,3 +77,9 @@ Text
 [Client: UIController]  ──(RequestUpgrade)─────────> [Server: PlayerDataManager]
 [Client: UIController]  ──(RequestPrestige)────────> [Server: PlayerDataManager]
 [Client: UIController]  ──(TestBuyProduct)─────────> [Server: MonetizationServer]
+
+Key Architectural Rules
+Server Authority: All damage, loot addition, oxygen depletion, bag dropping, and pearl transactions run strictly on the server.
+Data Persistence Safety: PlayerDataManager sanitizes all items before inserting them into profile.Data.LootBag so that Roblox userdata types (such as Color3) never enter ProfileService or DataStores.
+Speed Authority: PlayerDataManager.GetDefaultWalkSpeed(player) is the single source of truth for walk/swim speed, dynamically computing Fins tiers and Prestige multipliers to prevent creature slows from corrupting player stats.
+Anti-Dupe Safeguard: Dropped bags are a live race: using a Revive Token despawns the world bag, while another player looting the world bag dismisses the victim's revive prompt.
