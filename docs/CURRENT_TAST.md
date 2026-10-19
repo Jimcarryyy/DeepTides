@@ -1,20 +1,41 @@
-# Current Task: Milestone 1 Demo Review & Polish
+---
+
+### 3. `docs/CURRENT_TASK.md`
+
+*(Note: Replace `docs/CURRENT_TAST.md` with this file to fix the repo file name typo)*
+
+```markdown
+# Current Task: Milestone 1–3 Integration Verification & Bug Fixes
 
 ## Goal
-Final review and polish of the Milestone 1 playable demo before client submission for the $186 AUD payout.
+Verify all features implemented across Milestones 1 to 3 in Roblox Studio, patch discovered logic gaps in the codebase, and finalize the complete game loop for client sign-off.
 
-## Milestone 1 Status: COMPLETED
-- [x] **Step 0: Workspace & Folder Structure** (Studio + Argon configured)
-- [x] **Step 1: Core Data Framework** (ProfileService + PlayerDataManager saving Pearls)
-- [x] **Step 2: Configuration Modules** (ZoneConfig, GearConfig, LootConfig)
-- [x] **Step 3: Oxygen System** (Server drain/refill, drowning damage, live HUD countdown)
-- [x] **Step 4: Zone 1 Loot Spawning & Collection** (Dynamic spawner, distinct low-poly drops, bag limits)
-- [x] **Step 5: Surface Dock & Sell Station** (Sell pad, transactional inventory clearing, pearl rewards)
-- [x] **Step 6: Demo UI** (StarterGui MainHUD, Pearls/Bag pill stack, Oxygen gauge, Sell toast)
-- [x] **Step 7: Environment** (Low-poly circular atoll hub with central diving lagoon)
+---
 
-## Next Milestone (Milestone 2 - $217 AUD)
-- Full Zones 2 & 3 expansion (Kelp Forest, Sunken Shipwreck).
-- Creature AI via PathfindingService (Jellyfish, Electric Eel, Hammerhead Shark).
-- Gear Upgrade Shop (Oxygen Tank, Loot Bag, Speed Fins tiers).
-- Basic PvP Opt-in system.
+## Codebase Status: Milestones 1–3 Implemented
+- [x] **Milestone 1:** Core loop, Zone 1 Shallow Reef, Oxygen system, Loot Bag collection, Dock selling, ProfileService persistence, Main HUD.
+- [x] **Milestone 2:** Zones 2 & 3 (Kelp Forest, Shipwreck), 5-Tier Gear Upgrade Shop, Creature AI (Jellyfish, Eel, Shark), Tool combat.
+- [x] **Milestone 3:** Zones 4 & 5 (Abyss, Cursed Deep), World Boss (The Leviathan), Treasure Vault, Opt-in PvP system with suit abilities and dodge dash, Prestige system (10 ranks), Full Monetisation suite with auto-prompts.
+
+---
+
+## Active Tasks / Fixes Required (Based on Code Audit)
+- [ ] **Fix 1: Hook Loot Magnet Dev Product in `LootServer.server.luau`**
+  - Check `char:GetAttribute("LootMagnetActive")` to double `MAX_COLLECT_DISTANCE` and ProximityPrompt distance.
+- [ ] **Fix 2: Hook Guaranteed Rare Drop in `LootServer.server.luau`**
+  - Read `player:GetAttribute("GuaranteedRare")` during collection and override rolled item rarity if active.
+- [ ] **Fix 3: Complete PvP Loot Bag Drop & Revive Token Hook**
+  - In `ServerInit.server.luau`, detect when a PvP player is killed by another player underwater.
+  - Drop their loot bag into `Workspace.ActiveLoot`, store `LastDroppedLoot` attribute for the 30s Revive Token window.
+- [ ] **Fix 4: Add Auto-Prompt for Revive Token to `UIController.client.luau`**
+  - Show 2-second automatic purchase modal upon PvP defeat.
+- [ ] **Fix 5: File Rename Cleanup**
+  - Rename `src/ServerScriptService/Core/SellSever.server.luau` to `SellServer.server.luau`.
+  - Delete obsolete `docs/CURRENT_TAST.md` in favor of `docs/CURRENT_TASK.md`.
+- [ ] **Fix 6: End-to-End Studio Smoke Test**
+  - Test all 5 zones, boss fight, prestige reset, and purchase simulation in Studio.
+
+---
+
+## What "Done" Looks Like
+All 3 milestones fully playable without console warnings or dead attributes, verified in Studio, and ready for client delivery and payout.

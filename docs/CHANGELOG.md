@@ -1,30 +1,46 @@
 # Changelog
 
-## [Unreleased] - Initial Project Setup
-- **Date:** 2026-10-16
-- **Changes:**
-  - Initialized documentation files (`PROJECT_CONTEXT.md`, `CURRENT_TASK.md`, `ARCHITECTURE.md`, `DECISIONS.md`, `KNOWN_ISSUES.md`, `MILESTONES.md`).
-  - Outlined scope and execution plan for Milestone 1 demo.
-- **Affected Files:** All context MD files.
-- **Why:** Establish persistent workflow, technical roadmap, and architectural boundaries before writing code.
+All notable changes to the Deep Tides project are documented in this file.
 
-## [Unreleased] - Step 0 Completed
-- **Date:** 2026-10-16
-- **Changes:** Executed idempotent hierarchy setup script via Command Bar. Created `Config`, `Modules`, and `Remotes` (with `OxygenUpdate`, `PlayerDataUpdate`, `SellResult`) in ReplicatedStorage; `Core` and `Libs` in ServerScriptService; `Controllers` in StarterPlayerScripts; `Zones`, `LootSpawns`, and `DockArea` in Workspace.
-- **Affected Files:** Roblox Studio hierarchy.
-- **Why:** Establish consistent instance structure required by upcoming client/server modules.
+## [0.3.0] - 2026-10-20 (Milestone 1–3 Full Codebase Delivery)
+### Added
+- **Zone 4 & 5 Expansion:** Added "The Abyss" (-240 to -400 studs) and "The Cursed Deep" (-400 to -600 studs) with extreme pressure hazards and custom water tinting.
+- **The Leviathan World Raid Boss:** 1,500 HP raid boss in Zone 5 with animated boss health bar, undulation AI, and seafloor golden Treasure Vault rewarding +5,000 Pearls on defeat.
+- **Hostile Ecosystem AI:** Giant Octopus (ink cloud blind / -50% speed), Hammerhead Shark (fast pursuit), Electric Eel (electric stun), and ambient Jellyfish.
+- **Opt-in PvP Engine:** Surface dock PvP station toggle, overhead billboard indicators, directional underwater Dodge Dash (Space/Shift/ButtonB), and weapon swing combat.
+- **Suit Special Abilities:**
+  - Tier 2: Speed Surge (+150% swim speed for 4s).
+  - Tier 3: Iron Skin (-60% damage reduction for 6s).
+  - Tier 4: Thermal Barrier (-70% damage reduction for 7s).
+  - Tier 5: Leviathan Aura (-80% shield + 2x speed for 8s).
+- **Prestige System:** Unlocked at all Tier 5 gear + 50,000 Pearls. Resets gear for +10% Pearl value and +5% speed per rank up to Rank X with overhead prestige crests.
+- **Monetisation Engine:**
+  - MarketplaceService `ProcessReceipt` and `PromptGamePassPurchaseFinished`.
+  - Game passes: Deep Diver (2x oxygen), Treasure Hunter (+25% sell value, +1 slot), Leviathan Pass (Zone 5 pressure immunity).
+  - Dev Products: Starter Pack, Emergency Oxygen, Revive Token, Loot Magnet, Rare Dive.
+  - Studio Test Mode toggle (`MonetizationConfig.TEST_MODE`) via `TestBuyProduct` remote.
+  - Hard UX 2-second auto-prompt on critical oxygen (<= 8s).
+- **Dynamic Scrolling Frames:** Automatic `CanvasSize` binding based on `UIListLayout.AbsoluteContentSize` in `UIController`.
 
-## [0.1.0] - Milestone 1 Playable Demo Complete
-- **Date:** 2026-10-16
-- **Added:**
-  - Full server-authoritative core gameplay loop: Dive -> Collect -> Surface -> Sell -> Save.
-  - Low-poly atoll island hub with central ocean diving hole, seabed, and wooden dock.
-  - ProfileService persistence saving player Pearls across game sessions.
-  - Server-authoritative oxygen depletion (underwater) and rapid surface refill.
-  - Zone 1 loot spawner with distinct low-poly models (Sea Shell, Starfish, Rusty Coin, Barnacled Chest).
-  - Surface dock Sell Station pad with transactional sales and slide-in toast notifications.
-  - StarterGui MainHUD featuring Pearls counter, Bag capacity tracker, and animated Oxygen gauge.
-- **Fixed:**
-  - Removed legacy TypeScript templates and infinite yield warnings.
-  - Resolved event re-entrancy depth recursion in LootServer by isolating active loot into `Workspace.ActiveLoot`.
-  - Shifted UI below modern Roblox Unibar to eliminate HUD overlap across devices.
+### Fixed
+- Stabilized tool equipping logic to eliminate unhandled tool state replication.
+- Added dynamic pressure hazard calculations preventing depth exploits.
+
+---
+
+## [0.2.0] - 2026-10-18 (Milestone 2 Expansion)
+### Added
+- 5-Tier Gear Upgrade Shop (`GearShopModal`) supporting Oxygen Tanks, Loot Bags, Speed Fins, Diving Suits, and Diving Tools.
+- Surface dock Gear Shop station with interactive ProximityPrompt.
+- Underwater combat damage calculation against wildlife using equipped Diving Tools.
+- Zone 2 & Zone 3 loot items (Glowing Kelp Bulb, Giant Pearl Oyster, Galleon Gold Ingot, Captain's Cutlass, etc.).
+
+---
+
+## [0.1.0] - 2026-10-16 (Milestone 1 Core Loop)
+### Added
+- Initial server-authoritative oxygen depletion loop and surface dock refill.
+- Zone 1 Shallow Reef loot spawning (Sea Shell, Starfish, Rusty Coin, Barnacled Chest).
+- ProfileService session-locking persistence for Pearls and gear data.
+- Surface dock sell station with Pearl awards and notification toast alerts.
+- Basic MainHUD with Pearls counter, Bag counter, and Oxygen meter.
