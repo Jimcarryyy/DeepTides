@@ -3,6 +3,7 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
+local HttpService = game:GetService("HttpService")
 
 -- ===================================================================
 -- 1. AUTO-REMOTE INITIALIZER
@@ -25,7 +26,9 @@ local requiredRemotes = {
 	"TogglePvP",
 	"RequestPrestige",
 	"BossHealthUpdate",
-	"TestBuyProduct", -- New for Milestone 3 Monetisation
+	"TestBuyProduct",
+	"ShowRevivePrompt",
+	"HideRevivePrompt", -- Closes prompt if bag was stolen before revive
 }
 
 for _, remoteName in ipairs(requiredRemotes) do
@@ -43,11 +46,133 @@ end
 local PlayerDataManager = require(ServerScriptService.Core.PlayerDataManager)
 local GearConfig = require(ReplicatedStorage.Config.GearConfig)
 
-for _, player in ipairs(Players:GetPlayers()) do
-	task.spawn(PlayerDataManager.OnPlayerAdded, player)
+local ShowRevivePrompt = remotesFolder:WaitForChild("ShowRevivePrompt") :: RemoteEvent
+local HideRevivePrompt = remotesFolder:WaitForChild("HideRevivePrompt") :: RemoteEvent
+local NotifyClient = remotesFolder:WaitForChild("NotifyClient") :: RemoteEvent
+
+local updatePvPVisuals: (player: Player, isEnabled: boolean) -> ()
+
+-- Spawns a physical loot bag on the seabed when a player dies in PvP mode
+local function spawnDroppedLootBag(position: Vector3, bagItems: { any }, victim: Player)
+	local activeLoot = Workspace:FindFirstChild("ActiveLoot")
+	if not activeLoot then
+		activeLoot = Instance.new("Folder")
+		activeLoot.Name = "ActiveLoot"
+		activeLoot.Parent = Workspace
+	end
+
+	local bagModel = Instance.new("Model")
+	bagModel.Name = "DroppedBag_" .. victim.Name
+
+	local bagPart = Instance.new("Part")
+	bagPart.Name = "PrimaryPart"
+	bagPart.Size = Vector3.new(2.5, 2.0, 2.5)
+	bagPart.Position = position
+	bagPart.Anchored = true
+	bagPart.CanCollide = false
+	bagPart.Material = Enum.Material.Fabric
+	bagPart.Color = Color3.fromRGB(150, 75, 0)
+	bagPart.Parent = bagModel
+	bagModel.PrimaryPart = bagPart
+
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.ActionText = "Steal Loot Bag"
+	prompt.ObjectText = string.format("%s's Bag (%d items)", victim.Name, #bagItems)
+	prompt.HoldDuration = 0.5
+	prompt.MaxActivationDistance = 14
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = bagPart
+
+	prompt.Triggered:Connect(function(looter: Player)
+		local looterChar = looter.Character
+		if not looterChar or looterChar:GetAttribute("PvPEnabled") ~= true then
+			NotifyClient:FireClient(looter, "PVP REQUIRED TO STEAL", "Warning", "⚔️")
+			return
+		end
+
+		local stolenCount = 0
+		for _, item in ipairs(bagItems) do
+			local added = PlayerDataManager.AddToBag(looter, item)
+			if added then
+				stolenCount += 1
+			end
+		end
+
+		-- PREVENT DUPLICATION: If looted, wipe victim's backup and close their revive window!
+		if victim:IsDescendantOf(Players) then
+			victim:SetAttribute("LastDroppedLoot", nil)
+			HideRevivePrompt:FireClient(victim)
+			NotifyClient:FireClient(victim, "LOOT STOLEN!", string.format("Your dropped bag was claimed by %s!", looter.Name), "Warning", "⚔️")
+		end
+
+		NotifyClient:FireClient(looter, string.format("Stole %d items from %s!", stolenCount, victim.Name), "Success", "🎒")
+		bagModel:Destroy()
+	end)
+
+	bagModel.Parent = activeLoot
+
+	task.delay(180, function()
+		if bagModel and bagModel.Parent then
+			bagModel:Destroy()
+		end
+	end)
 end
 
-Players.PlayerAdded:Connect(PlayerDataManager.OnPlayerAdded)
+local function handleCharacterAdded(player: Player, char: Model)
+	local profile = PlayerDataManager.GetProfile(player)
+
+	if profile and profile.Data.PvPEnabled then
+		updatePvPVisuals(player, true)
+	end
+
+	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
+	humanoid.Died:Connect(function()
+		local activeProfile = PlayerDataManager.GetProfile(player)
+		local inPvP = (activeProfile and activeProfile.Data.PvPEnabled == true) or (char:GetAttribute("PvPEnabled") == true)
+		local currentBag = PlayerDataManager.GetBag(player)
+
+		if inPvP then
+			-- PvP Death: Drop physical bag on seabed & allow 30s revive race
+			player:SetAttribute("LastDroppedLoot", HttpService:JSONEncode(currentBag))
+			player:SetAttribute("LastPvPDeathTime", os.clock())
+
+			if #currentBag > 0 then
+				local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
+				local dropPos = if hrp then hrp.Position else Vector3.new(0, 0, 0)
+				spawnDroppedLootBag(dropPos, currentBag, player)
+				PlayerDataManager.ClearBag(player)
+			end
+
+			task.delay(1.5, function()
+				if player:IsDescendantOf(Players) then
+					ShowRevivePrompt:FireClient(player)
+				end
+			end)
+		else
+			-- PvE Death (Drowning, Wildlife, Pressure): Loot is lost to the sea!
+			if #currentBag > 0 then
+				PlayerDataManager.ClearBag(player)
+				NotifyClient:FireClient(player, "YOU DIED!", "You lost your collected loot. Upgrade your gear to dive deeper!", "Warning", "💀")
+			end
+		end
+	end)
+end
+
+local function onPlayerAdded(player: Player)
+	PlayerDataManager.OnPlayerAdded(player)
+	player.CharacterAdded:Connect(function(char)
+		handleCharacterAdded(player, char)
+	end)
+	if player.Character then
+		handleCharacterAdded(player, player.Character)
+	end
+end
+
+for _, player in ipairs(Players:GetPlayers()) do
+	task.spawn(onPlayerAdded, player)
+end
+
+Players.PlayerAdded:Connect(onPlayerAdded)
 Players.PlayerRemoving:Connect(PlayerDataManager.OnPlayerRemoving)
 
 local RequestUpgrade = remotesFolder:WaitForChild("RequestUpgrade") :: RemoteEvent
@@ -63,12 +188,11 @@ RequestPrestige.OnServerEvent:Connect(function(player: Player)
 end)
 
 -- ===================================================================
--- 3. PVP OPT-IN TOGGLE & BADGES
+-- 3. PVP OPT-IN TOGGLE & CLEAN TEXT-ONLY OVERHEAD BADGES
 -- ===================================================================
 local TogglePvP = remotesFolder:WaitForChild("TogglePvP") :: RemoteEvent
-local NotifyClient = remotesFolder:WaitForChild("NotifyClient") :: RemoteEvent
 
-local function updatePvPVisuals(player: Player, isEnabled: boolean)
+updatePvPVisuals = function(player: Player, isEnabled: boolean)
 	local char = player.Character
 	if not char then return end
 	local head = char:FindFirstChild("Head") :: BasePart?
@@ -81,24 +205,23 @@ local function updatePvPVisuals(player: Player, isEnabled: boolean)
 		char:SetAttribute("PvPEnabled", true)
 		local bboard = Instance.new("BillboardGui")
 		bboard.Name = "PvPBadge"
-		bboard.Size = UDim2.new(0, 90, 0, 26)
-		bboard.StudsOffset = Vector3.new(0, 2.5, 0)
+		bboard.Size = UDim2.new(0, 80, 0, 18)
+		bboard.StudsOffset = Vector3.new(0, 2.3, 0)
 		bboard.AlwaysOnTop = true
 		bboard.Parent = head
 
 		local badgeLabel = Instance.new("TextLabel")
 		badgeLabel.Size = UDim2.new(1, 0, 1, 0)
-		badgeLabel.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-		badgeLabel.BackgroundTransparency = 0.2
+		badgeLabel.BackgroundTransparency = 1
 		badgeLabel.BorderSizePixel = 0
-		badgeLabel.Text = "⚔️ PVP ON"
-		badgeLabel.TextColor3 = Color3.fromRGB(255, 235, 120)
+		badgeLabel.Text = "PVP"
+		badgeLabel.TextColor3 = Color3.fromRGB(255, 75, 75)
 		badgeLabel.Font = Enum.Font.FredokaOne
 		badgeLabel.TextSize = 13
 		badgeLabel.Parent = bboard
 
 		local stroke = Instance.new("UIStroke")
-		stroke.Color = Color3.fromRGB(255, 60, 60)
+		stroke.Color = Color3.fromRGB(15, 15, 20)
 		stroke.Thickness = 1.5
 		stroke.Parent = badgeLabel
 	else
@@ -193,6 +316,9 @@ AttackRequest.OnServerEvent:Connect(function(attacker: Player)
 						else
 							NotifyClient:FireClient(target, string.format("Attacked by %s! (-%d HP)", attacker.Name, finalDmg), "Warning", "⚔️")
 						end
+
+						targetChar:SetAttribute("LastPvPAttacker", attacker.UserId)
+						targetChar:SetAttribute("LastPvPHitTime", os.clock())
 
 						targetHum:TakeDamage(finalDmg)
 						NotifyClient:FireClient(attacker, string.format("Hit %s for %d damage!", target.Name, finalDmg), "Success", "🗡️")
@@ -326,4 +452,4 @@ AbilityRequest.OnServerEvent:Connect(function(player: Player)
 	end
 end)
 
-print("[Deep Tides] ServerInit: Monetization remotes active.")
+print("[Deep Tides] ServerInit: Clean text badges & anti-dupe PvP loop active.")

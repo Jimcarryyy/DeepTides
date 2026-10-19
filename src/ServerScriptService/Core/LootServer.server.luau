@@ -29,8 +29,18 @@ if not LootModelsFolder then
 	end
 end
 
+-- Zone loot lookup mapping to match LootConfig tables exactly
+local zoneLootMap: { [number]: { LootConfig.LootItem } } = {
+	[1] = LootConfig.Zone1Loot,
+	[2] = LootConfig.Zone2Loot,
+	[3] = LootConfig.Zone3Loot,
+	[4] = LootConfig.Zone4Loot,
+	[5] = LootConfig.Zone5Loot,
+}
+
 local RESPAWN_TIME = 10
-local MAX_COLLECT_DISTANCE = 18
+local BASE_COLLECT_DISTANCE = 18
+local MAGNET_COLLECT_DISTANCE = 36
 local nodeOccupied: { [BasePart]: boolean } = {}
 
 local function spawnLootItem(spawnNode: BasePart)
@@ -96,11 +106,12 @@ local function spawnLootItem(spawnNode: BasePart)
 
 	lootModel.Parent = ActiveLootFolder
 
+	-- MaxActivationDistance is 24 so players with Loot Magnet can interact from distance
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.ActionText = "Collect"
 	prompt.ObjectText = string.format("%s (+%d Pearls)", lootData.Name, lootData.BaseValue)
 	prompt.HoldDuration = 0.15
-	prompt.MaxActivationDistance = 12
+	prompt.MaxActivationDistance = 24
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = primary
 
@@ -114,18 +125,42 @@ local function spawnLootItem(spawnNode: BasePart)
 		local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if not hrp then return end
 
-		if (hrp.Position - primary.Position).Magnitude > MAX_COLLECT_DISTANCE then
+		-- 1. LOOT MAGNET DEV PRODUCT CHECK
+		local hasMagnet = char:GetAttribute("LootMagnetActive") == true
+		local maxAllowedDist = if hasMagnet then MAGNET_COLLECT_DISTANCE else BASE_COLLECT_DISTANCE
+		local dist = (hrp.Position - primary.Position).Magnitude
+
+		if dist > maxAllowedDist or (not hasMagnet and dist > 14) then
 			return
 		end
 
-		local success, reason = PlayerDataManager.AddToBag(player, lootData)
+		-- 2. GUARANTEED RARE DEV PRODUCT CHECK
+		local awardedItem = lootData
+		if player:GetAttribute("GuaranteedRare") == true then
+			player:SetAttribute("GuaranteedRare", nil)
+
+			local currentZoneLoot = zoneLootMap[zoneId] or LootConfig.Zone1Loot
+			local rarePool = {}
+			for _, item in ipairs(currentZoneLoot) do
+				if item.Rarity == "Rare" or item.Rarity == "Epic" or item.Rarity == "Legendary" then
+					table.insert(rarePool, item)
+				end
+			end
+
+			if #rarePool > 0 then
+				awardedItem = rarePool[math.random(1, #rarePool)]
+				NotifyClient:FireClient(player, string.format("RARE DIVE! Upgraded drop to %s (%s)!", awardedItem.Name, awardedItem.Rarity), "Success", "⭐")
+			end
+		end
+
+		local success, reason = PlayerDataManager.AddToBag(player, awardedItem)
 
 		if success then
 			isCollected = true
 			lootModel:Destroy()
 			nodeOccupied[spawnNode] = false
 
-			NotifyClient:FireClient(player, string.format("+ %s (+%d Pearls)", lootData.Name, lootData.BaseValue), "Info", "✨")
+			NotifyClient:FireClient(player, string.format("+ %s (+%d Pearls)", awardedItem.Name, awardedItem.BaseValue), "Info", "✨")
 
 			task.delay(RESPAWN_TIME, function()
 				if spawnNode and spawnNode.Parent then
@@ -138,7 +173,7 @@ local function spawnLootItem(spawnNode: BasePart)
 			prompt.ObjectText = "[BAG FULL! Sell at Dock]"
 			task.delay(2, function()
 				if prompt and prompt.Parent then
-					prompt.ObjectText = string.format("%s (+%d Pearls)", lootData.Name, lootData.BaseValue)
+					prompt.ObjectText = string.format("%s (+%d Pearls)", awardedItem.Name, awardedItem.BaseValue)
 				end
 			end)
 		end

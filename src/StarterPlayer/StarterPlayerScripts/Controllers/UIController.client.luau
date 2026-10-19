@@ -27,6 +27,8 @@ if not MainHUD then
 	MainHUD = PlayerGui:WaitForChild("MainHUD") :: ScreenGui
 end
 
+MainHUD.ResetOnSpawn = false
+
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local PlayerDataUpdate = Remotes:WaitForChild("PlayerDataUpdate") :: RemoteEvent
 local OxygenUpdate = Remotes:WaitForChild("OxygenUpdate") :: RemoteEvent
@@ -36,6 +38,8 @@ local RequestUpgrade = Remotes:WaitForChild("RequestUpgrade") :: RemoteEvent
 local RequestPrestige = Remotes:WaitForChild("RequestPrestige") :: RemoteEvent
 local BossHealthUpdate = Remotes:WaitForChild("BossHealthUpdate") :: RemoteEvent
 local TestBuyProduct = Remotes:WaitForChild("TestBuyProduct") :: RemoteEvent
+local ShowRevivePrompt = Remotes:WaitForChild("ShowRevivePrompt") :: RemoteEvent
+local HideRevivePrompt = Remotes:WaitForChild("HideRevivePrompt") :: RemoteEvent
 
 -- UI References
 local pearlsPill = MainHUD:WaitForChild("PearlsPill", 3) :: Frame?
@@ -59,9 +63,14 @@ local toastMessage = toast and toast:FindFirstChild("Message") :: TextLabel?
 local toastIcon = toast and toast:FindFirstChild("Icon") :: TextLabel?
 local toastStroke = toast and toast:FindFirstChildOfClass("UIStroke") :: UIStroke?
 
+-- Hard UX Auto-Prompts
 local autoO2 = MainHUD:WaitForChild("AutoOxygenPrompt", 3) :: Frame?
 local autoO2BuyBtn = autoO2 and autoO2:FindFirstChild("BuyButton") :: TextButton?
 local hasAutoPromptedO2 = false
+
+local autoRevive = MainHUD:WaitForChild("AutoRevivePrompt", 3) :: Frame?
+local autoReviveBuyBtn = autoRevive and autoRevive:FindFirstChild("BuyButton") :: TextButton?
+local autoReviveDesc = autoRevive and autoRevive:FindFirstChild("Desc") :: TextLabel?
 
 local shopModal = MainHUD:WaitForChild("GearShopModal", 3) :: Frame?
 local shopList = shopModal and shopModal:FindFirstChild("List") :: ScrollingFrame?
@@ -103,9 +112,8 @@ local currentData = {
 }
 
 -- ===================================================================
--- 0. DYNAMIC SCROLLING CANVAS BINDINGS (BATTLE-TESTED FIX)
+-- 0. DYNAMIC SCROLLING CANVAS BINDINGS
 -- ===================================================================
--- Ensures Store and Shop lists always expand to exact content height + bottom padding
 if storeList then
 	local uiList = storeList:FindFirstChildOfClass("UIListLayout")
 	if uiList then
@@ -129,7 +137,7 @@ if shopList then
 end
 
 -- ===================================================================
--- 1. HARD UX AUTO-PROMPTS
+-- 1. HARD UX AUTO-PROMPTS (OXYGEN & REVIVE TOKEN)
 -- ===================================================================
 local function showAutoOxygenPrompt()
 	if not autoO2 or autoO2.Visible then return end
@@ -156,6 +164,57 @@ if autoO2BuyBtn then
 		hideAutoOxygenPrompt()
 	end)
 end
+
+local function showAutoRevivePrompt()
+	if not autoRevive or autoRevive.Visible then return end
+	autoRevive.Position = UDim2.new(0.5, 0, 0, -90)
+	autoRevive.Visible = true
+
+	TweenService:Create(autoRevive, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Position = UDim2.new(0.5, 0, 0, 72)
+	}):Play()
+end
+
+local function hideAutoRevivePrompt()
+	if not autoRevive or not autoRevive.Visible then return end
+	local tweenOut = TweenService:Create(autoRevive, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+		Position = UDim2.new(0.5, 0, 0, -90)
+	})
+	tweenOut:Play()
+	tweenOut.Completed:Wait()
+	autoRevive.Visible = false
+end
+
+if autoReviveBuyBtn then
+	autoReviveBuyBtn.MouseButton1Click:Connect(function()
+		TestBuyProduct:FireServer("ReviveToken")
+		hideAutoRevivePrompt()
+	end)
+end
+
+HideRevivePrompt.OnClientEvent:Connect(function()
+	hideAutoRevivePrompt()
+end)
+
+local activeReviveTimer = 0
+ShowRevivePrompt.OnClientEvent:Connect(function()
+	if not autoRevive then return end
+	showAutoRevivePrompt()
+
+	activeReviveTimer = 30
+	task.spawn(function()
+		while activeReviveTimer > 0 and autoRevive.Visible do
+			if autoReviveDesc then
+				autoReviveDesc.Text = string.format("Recover loot bag? (%ds)", activeReviveTimer)
+			end
+			task.wait(1)
+			activeReviveTimer -= 1
+		end
+		if autoRevive.Visible then
+			hideAutoRevivePrompt()
+		end
+	end)
+end)
 
 -- ===================================================================
 -- 2. STORE MODAL (BOUNCY ANIMATION & DYNAMIC SCROLL)
@@ -222,15 +281,22 @@ if storeList then
 end
 
 -- ===================================================================
--- 3. BOSS HEALTH BAR
+-- 3. BOSS HEALTH BAR (ZONE 5 EXCLUSIVE)
 -- ===================================================================
 local BOSS_TWEEN_INFO = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-BossHealthUpdate.OnClientEvent:Connect(function(curHP: number, maxHP: number, isAlive: boolean)
-	if not bossBar then return end
+local currentBossHP = 0
+local currentBossMaxHP = 1500
+local isBossAlive = false
 
-	if isAlive and curHP > 0 then
+local function updateBossBarVisibility()
+	if not bossBar then return end
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+	local inZone5 = hrp and (hrp.Position.Y <= -400)
+
+	if isBossAlive and currentBossHP > 0 and inZone5 then
 		bossBar.Visible = true
-		local percent = math.clamp(curHP / maxHP, 0, 1)
+		local percent = math.clamp(currentBossHP / currentBossMaxHP, 0, 1)
 
 		if bossBarFill then
 			TweenService:Create(bossBarFill, BOSS_TWEEN_INFO, {
@@ -239,15 +305,22 @@ BossHealthUpdate.OnClientEvent:Connect(function(curHP: number, maxHP: number, is
 		end
 
 		if bossHPText then
-			bossHPText.Text = string.format("%d / %d HP", curHP, maxHP)
+			bossHPText.Text = string.format("%d / %d HP", currentBossHP, currentBossMaxHP)
 		end
 	else
 		bossBar.Visible = false
 	end
+end
+
+BossHealthUpdate.OnClientEvent:Connect(function(curHP: number, maxHP: number, alive: boolean)
+	currentBossHP = curHP
+	currentBossMaxHP = maxHP
+	isBossAlive = alive
+	updateBossBarVisibility()
 end)
 
 -- ===================================================================
--- 4. GEAR SHOP
+-- 4. GEAR SHOP (CLEAN NON-OVERLAPPING TEXT)
 -- ===================================================================
 local catalogMap = {
 	["OxygenTank"] = { Catalog = GearConfig.OxygenTanks, Title = "Oxygen Tank", StatKey = "MaxOxygen", StatSuffix = "s Air" },
@@ -273,8 +346,9 @@ local function refreshShopMenu()
 		local statLabel = row:FindFirstChild("StatLabel") :: TextLabel?
 		local upgradeBtn = row:FindFirstChild("UpgradeButton") :: TextButton?
 
+		-- Concise, non-overlapping label format
 		if nameLabel then
-			nameLabel.Text = string.format("%s (Tier %d - %s)", meta.Title, currentTier, currentTierConfig.Name)
+			nameLabel.Text = string.format("Tier %d: %s", currentTier, currentTierConfig.Name)
 		end
 
 		if currentTier >= #catalog then
@@ -289,8 +363,7 @@ local function refreshShopMenu()
 			local nextConfig = catalog[nextTier]
 
 			if statLabel then
-				statLabel.Text = string.format("%s: %s%s  ➔  %s%s", 
-					currentTierConfig.Name,
+				statLabel.Text = string.format("%s%s  ➔  %s%s", 
 					tostring(currentTierConfig[meta.StatKey]), meta.StatSuffix,
 					tostring(nextConfig[meta.StatKey]), meta.StatSuffix
 				)
@@ -376,6 +449,14 @@ local PRESTIGE_FULL_SIZE = UDim2.new(0, 480, 0, 360)
 local function updatePrestigeButtonState()
 	if not prestigeActionBtn then return end
 
+	local currentRank = currentData.PrestigeLevel or 0
+	if currentRank >= 10 then
+		prestigeActionBtn.Text = "MAX PRESTIGE REACHED (RANK X)"
+		prestigeActionBtn.BackgroundColor3 = Color3.fromRGB(75, 85, 95)
+		prestigeActionBtn.AutoButtonColor = false
+		return
+	end
+
 	local allGearsMaxed = (currentData.OxygenTankTier == 5)
 		and (currentData.LootBagTier == 5)
 		and (currentData.SpeedFinsTier == 5)
@@ -421,6 +502,7 @@ end
 if prestigeCloseBtn then prestigeCloseBtn.MouseButton1Click:Connect(closePrestigeModal) end
 if prestigeActionBtn then
 	prestigeActionBtn.MouseButton1Click:Connect(function()
+		if (currentData.PrestigeLevel or 0) >= 10 then return end
 		RequestPrestige:FireServer()
 		closePrestigeModal()
 	end)
@@ -484,7 +566,7 @@ end
 
 NotifyClient.OnClientEvent:Connect(showNotification)
 
--- Depth Zone Entry Tracker
+-- Depth Zone Entry Tracker & Real-Time Boss Bar State
 local lastZoneId = 1
 task.spawn(function()
 	while true do
@@ -502,6 +584,9 @@ task.spawn(function()
 			else
 				lastZoneId = 1
 			end
+			updateBossBarVisibility()
+		else
+			if bossBar then bossBar.Visible = false end
 		end
 	end
 end)
@@ -615,7 +700,6 @@ OxygenUpdate.OnClientEvent:Connect(function(cur: number, max: number, isSubmerge
 		end
 	end
 
-	-- Hard UX Auto-Prompt: Pops within 2s of critical oxygen
 	if isSubmerged and cur <= 8 then
 		if not hasAutoPromptedO2 then
 			hasAutoPromptedO2 = true
@@ -629,4 +713,4 @@ OxygenUpdate.OnClientEvent:Connect(function(cur: number, max: number, isSubmerge
 	end
 end)
 
-print("[Deep Tides] UIController: Dynamic scrollbar & content height active.")
+print("[Deep Tides] UIController: Concise shop labels & anti-dupe revive listeners active.")

@@ -3,6 +3,8 @@ local Players = game:GetService("Players")
 local MarketplaceService = game:GetService("MarketplaceService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
+local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
 
 local MonetizationConfig = require(ReplicatedStorage.Config.MonetizationConfig)
 local PlayerDataManager = require(ServerScriptService.Core.PlayerDataManager)
@@ -23,12 +25,36 @@ local function fulfillPurchase(player: Player, itemKey: string): boolean
 
 	elseif itemKey == "ReviveToken" then
 		local lastDropped = player:GetAttribute("LastDroppedLoot")
-		if lastDropped then
-			NotifyClient:FireClient(player, "REVIVE TOKEN USED! Recovered your lost loot bag!", "Success", "🎒")
-			player:SetAttribute("LastDroppedLoot", nil)
-		else
-			NotifyClient:FireClient(player, "Revive Token active!", "Success", "✨")
+		if not lastDropped or typeof(lastDropped) ~= "string" then
+			NotifyClient:FireClient(player, "TOO LATE! Your loot was already claimed!", "Warning", "⚠️")
+			return false
 		end
+
+		-- Despawn physical bag from seabed so nobody else can claim it
+		local activeLoot = Workspace:FindFirstChild("ActiveLoot")
+		if activeLoot then
+			local droppedBag = activeLoot:FindFirstChild("DroppedBag_" .. player.Name)
+			if droppedBag then
+				droppedBag:Destroy()
+			end
+		end
+
+		local success, recoveredItems = pcall(function()
+			return HttpService:JSONDecode(lastDropped)
+		end)
+
+		if success and typeof(recoveredItems) == "table" then
+			local recoveredCount = 0
+			for _, item in ipairs(recoveredItems) do
+				local added = PlayerDataManager.AddToBag(player, item)
+				if added then
+					recoveredCount += 1
+				end
+			end
+			NotifyClient:FireClient(player, string.format("REVIVE TOKEN USED! Recovered %d items!", recoveredCount), "Success", "🎒")
+		end
+
+		player:SetAttribute("LastDroppedLoot", nil)
 		return true
 
 	elseif itemKey == "StarterPack" then
@@ -54,26 +80,22 @@ local function fulfillPurchase(player: Player, itemKey: string): boolean
 	elseif itemKey == "DeepDiver" then
 		PlayerDataManager.AwardPass(player, "DeepDiver")
 		NotifyClient:FireClient(player, "DEEP DIVER PASS UNLOCKED! (Permanently 2x Oxygen Capacity)", "Success", "⚡")
-		print(string.format("[Monetization] %s unlocked Deep Diver Game Pass!", player.Name))
 		return true
 
 	elseif itemKey == "TreasureHunter" then
 		PlayerDataManager.AwardPass(player, "TreasureHunter")
 		NotifyClient:FireClient(player, "TREASURE HUNTER PASS UNLOCKED! (+25% Sell Value & +1 Slot)", "Success", "💰")
-		print(string.format("[Monetization] %s unlocked Treasure Hunter Game Pass!", player.Name))
 		return true
 
 	elseif itemKey == "LeviathanPass" then
 		PlayerDataManager.AwardPass(player, "LeviathanPass")
 		NotifyClient:FireClient(player, "LEVIATHAN PASS UNLOCKED! (Instant Zone 5 Pressure Immunity)", "Success", "👑")
-		print(string.format("[Monetization] %s unlocked Leviathan Pass!", player.Name))
 		return true
 	end
 
 	return false
 end
 
--- MarketplaceService ProcessReceipt for Developer Products
 MarketplaceService.ProcessReceipt = function(receiptInfo)
 	local player = Players:GetPlayerByUserId(receiptInfo.PlayerId)
 	if not player then
@@ -91,7 +113,6 @@ MarketplaceService.ProcessReceipt = function(receiptInfo)
 	return Enum.ProductPurchaseDecision.PurchaseGranted
 end
 
--- Live GamePass Purchase Finished Listener
 MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player: Player, passId: number, wasPurchased: boolean)
 	if wasPurchased then
 		for passKey, data in pairs(MonetizationConfig.GamePasses) do
@@ -103,7 +124,6 @@ MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player: Playe
 	end
 end)
 
--- Test Mode Remote (Allows testing all items in Studio without real Robux)
 local TestBuyProduct = Remotes:WaitForChild("TestBuyProduct") :: RemoteEvent
 TestBuyProduct.OnServerEvent:Connect(function(player: Player, itemKey: string)
 	if MonetizationConfig.TEST_MODE and typeof(itemKey) == "string" then
@@ -111,4 +131,4 @@ TestBuyProduct.OnServerEvent:Connect(function(player: Player, itemKey: string)
 	end
 end)
 
-print("[Deep Tides] MonetizationServer: Full GamePass & Product engine active.")
+print("[Deep Tides] MonetizationServer: Full anti-dupe purchase handling active.")
