@@ -132,7 +132,7 @@ local function getClosestSubmergedPlayer(origin: Vector3, maxRadius: number): (P
 end
 
 -- ===================================================================
--- CREATURE SPAWNERS
+-- CREATURE SPAWNERS (CLONED FROM REPLICATEDSTORAGE.CREATUREMODELS)
 -- ===================================================================
 local function spawnJellyfish(pos: Vector3, angleOffset: number)
 	creatureCounter += 1
@@ -227,7 +227,6 @@ local function spawnTheLeviathan(pos: Vector3)
 	activeCreatures[id] = bossInstance
 	leviathanBoss = bossInstance
 
-	-- Alert all players that the boss has emerged
 	BossHealthUpdate:FireAllClients(1500, 1500, true)
 	print("[Boss] The Leviathan has spawned in Zone 5 (Depth: -540)!")
 end
@@ -303,7 +302,6 @@ AttackRequest.OnServerEvent:Connect(function(player: Player)
 			player.Name, closestCreature.Type, toolConfig.Damage, math.max(0, closestCreature.Health), closestCreature.MaxHealth
 		))
 
-		-- Update Leviathan Boss Bar if hitting the Leviathan
 		if closestCreature.Type == "TheLeviathan" then
 			BossHealthUpdate:FireAllClients(math.max(0, closestCreature.Health), closestCreature.MaxHealth, true)
 		end
@@ -317,7 +315,6 @@ AttackRequest.OnServerEvent:Connect(function(player: Player)
 			end)
 		end
 
-		-- Defeat Logic
 		if closestCreature.Health <= 0 then
 			closestCreature.State = "Dead"
 			local reward = closestCreature.PearlReward
@@ -328,7 +325,6 @@ AttackRequest.OnServerEvent:Connect(function(player: Player)
 			PlayerDataManager.AddPearls(player, reward)
 			NotifyClient:FireClient(player, string.format("Defeated %s! (+%d Pearls)", creatureName, reward), "Success", "⚔️")
 
-			-- If The Leviathan is defeated: Spawn the massive Treasure Vault!
 			if cType == "TheLeviathan" then
 				BossHealthUpdate:FireAllClients(0, 1500, false)
 				spawnLeviathanVault(Vector3.new(0, -590, 0))
@@ -337,7 +333,6 @@ AttackRequest.OnServerEvent:Connect(function(player: Player)
 
 			closestCreature.Model:Destroy()
 
-			-- Respawn timer
 			task.delay(20, function()
 				if cType == "Jellyfish" then
 					spawnJellyfish(bPos, math.random() * math.pi)
@@ -382,7 +377,7 @@ RunService.Heartbeat:Connect(function(dt: number)
 				applyCreatureDamage(player, creature.Damage, "Jellyfish", "⚡")
 			end
 
-		-- 2. ELECTRIC EEL
+		-- 2. ELECTRIC EEL (STUNS 1.2S, RESTORES FULL GEAR SPEED)
 		elseif creature.Type == "ElectricEel" then
 			local player, hrp, dist = getClosestSubmergedPlayer(primary.Position, creature.AggroRadius)
 
@@ -401,7 +396,9 @@ RunService.Heartbeat:Connect(function(dt: number)
 						task.spawn(function()
 							hum.WalkSpeed = 0
 							task.wait(1.2)
-							hum.WalkSpeed = 16
+							if player:IsDescendantOf(Players) then
+								PlayerDataManager.ResetWalkSpeed(player)
+							end
 						end)
 					end
 				end
@@ -436,7 +433,7 @@ RunService.Heartbeat:Connect(function(dt: number)
 				model:PivotTo(CFrame.lookAt(targetPos, lookTarget))
 			end
 
-		-- 4. GIANT OCTOPUS
+		-- 4. GIANT OCTOPUS (SLOWS 50% OF GEAR SPEED, RESTORES FULL GEAR SPEED)
 		elseif creature.Type == "GiantOctopus" then
 			local player, hrp, dist = getClosestSubmergedPlayer(primary.Position, creature.AggroRadius)
 
@@ -453,11 +450,13 @@ RunService.Heartbeat:Connect(function(dt: number)
 					local hum = char and char:FindFirstChildOfClass("Humanoid")
 					if hum then
 						NotifyClient:FireClient(player, "BLINDED BY INK CLOUD! (-50% Swim Speed)", "Warning", "🖤")
-						local currentSpeed = hum.WalkSpeed
-						hum.WalkSpeed = math.max(8, currentSpeed * 0.5)
+						local baseSpeed = PlayerDataManager.GetDefaultWalkSpeed(player)
+						hum.WalkSpeed = math.max(6, baseSpeed * 0.5)
 
 						task.delay(2.5, function()
-							if hum and hum.Parent then hum.WalkSpeed = currentSpeed end
+							if hum and hum.Parent and player:IsDescendantOf(Players) then
+								PlayerDataManager.ResetWalkSpeed(player)
+							end
 						end)
 					end
 				end
@@ -475,7 +474,6 @@ RunService.Heartbeat:Connect(function(dt: number)
 			local player, hrp, dist = getClosestSubmergedPlayer(primary.Position, creature.AggroRadius)
 
 			if player and hrp and now > creature.CooldownUntil then
-				-- Aggressive boss pursuit
 				local dir = (hrp.Position - primary.Position).Unit
 				local nextPos = primary.Position + (dir * creature.Speed * dt)
 				model:PivotTo(CFrame.lookAt(nextPos, hrp.Position))
@@ -485,7 +483,6 @@ RunService.Heartbeat:Connect(function(dt: number)
 					applyCreatureDamage(player, creature.Damage, "The Leviathan", "👑")
 				end
 			else
-				-- Massive undulating serpent coil in the dark Zone 5 depths
 				creature.PatrolAngle += 0.25 * dt
 				local patrolX = math.cos(creature.PatrolAngle) * creature.PatrolRadius
 				local patrolZ = math.sin(creature.PatrolAngle) * creature.PatrolRadius

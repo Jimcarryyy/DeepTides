@@ -64,6 +64,27 @@ function PlayerDataManager.AddPearls(player: Player, amount: number)
 end
 
 -- ===================================================================
+-- DYNAMIC WALKSPEED / GEAR SPEED CONTROLLER (PREVENTS PERMANENT SLOWS)
+-- ===================================================================
+function PlayerDataManager.GetDefaultWalkSpeed(player: Player): number
+	local profile = PlayerProfiles[player]
+	if not profile then return 16 end
+	local finsTier = profile.Data.SpeedFinsTier or 1
+	local finsConfig = GearConfig.SpeedFins[finsTier] or GearConfig.SpeedFins[1]
+	local prestigeMult = 1 + (profile.Data.PrestigeLevel or 0) * 0.05
+	return 16 * finsConfig.SwimMultiplier * prestigeMult
+end
+
+function PlayerDataManager.ResetWalkSpeed(player: Player)
+	local char = player.Character
+	if not char then return end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if hum and hum.Health > 0 then
+		hum.WalkSpeed = PlayerDataManager.GetDefaultWalkSpeed(player)
+	end
+end
+
+-- ===================================================================
 -- GEAR TIER GETTERS
 -- ===================================================================
 function PlayerDataManager.GetTankTier(player: Player): number
@@ -121,7 +142,6 @@ function PlayerDataManager.AddToBag(player: Player, item: any): (boolean, string
 		return false, "Bag is full!"
 	end
 
-	-- Insert sanitized item (clean primitives only: no Color3/userdata)
 	table.insert(profile.Data.LootBag, sanitizeItem(item))
 	PlayerDataManager.SyncClient(player)
 	return true
@@ -215,11 +235,7 @@ local function applyGearBuffs(player: Player, char: Model)
 	local profile = PlayerProfiles[player]
 	if not profile then return end
 
-	local hum = char:WaitForChild("Humanoid") :: Humanoid
-	local finsTier = profile.Data.SpeedFinsTier or 1
-	local finsConfig = GearConfig.SpeedFins[finsTier] or GearConfig.SpeedFins[1]
-	local prestigeMult = 1 + (profile.Data.PrestigeLevel or 0) * 0.05
-	hum.WalkSpeed = 16 * finsConfig.SwimMultiplier * prestigeMult
+	PlayerDataManager.ResetWalkSpeed(player)
 
 	local toolTier = profile.Data.DivingToolTier or 1
 	local toolsFolder = ReplicatedStorage:FindFirstChild("Tools")

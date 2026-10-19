@@ -28,7 +28,7 @@ local requiredRemotes = {
 	"BossHealthUpdate",
 	"TestBuyProduct",
 	"ShowRevivePrompt",
-	"HideRevivePrompt", -- Closes prompt if bag was stolen before revive
+	"HideRevivePrompt",
 }
 
 for _, remoteName in ipairs(requiredRemotes) do
