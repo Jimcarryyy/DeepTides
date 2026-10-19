@@ -19,6 +19,7 @@ Base: `https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/`
 - [ZoneConfig.luau](https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/src/ReplicatedStorage/Config/ZoneConfig.luau)
 - [LootConfig.luau](https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/src/ReplicatedStorage/Config/LootConfig.luau)
 - [GearConfig.luau](https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/src/ReplicatedStorage/Config/GearConfig.luau)
+- [MonetizationConfig.luau](https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/src/ReplicatedStorage/Config/MonetizationConfig.luau)
 
 ### ServerScriptService/Core
 
@@ -27,6 +28,8 @@ Base: `https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/`
 - [ServerInit.server.luau](https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/src/ServerScriptService/Core/ServerInit.server.luau)
 - [OxygenServer.server.luau](https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/src/ServerScriptService/Core/OxygenServer.server.luau)
 - [SellSever.server.luau](https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/src/ServerScriptService/Core/SellSever.server.luau)
+- [MonetizationServer.server.luau](https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/src/ServerScriptService/Core/MonetizationServer.server.luau)
+- [CreatureServer.server.luau](https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/src/ServerScriptService/Core/CreatureServer.server.luau)
 
 ### ServerScriptService/Libs
 
@@ -36,3 +39,4 @@ Base: `https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/`
 
 - [UIController.client.luau](https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/src/StarterPlayer/StarterPlayerScripts/Controllers/UIController.client.luau)
 - [OxygenClient.client.luau](https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/src/StarterPlayer/StarterPlayerScripts/Controllers/OxygenClient.client.luau)
+- [CombatClient.client.luau](https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/src/StarterPlayer/StarterPlayerScripts/Controllers/CombatClient.client.luau)
