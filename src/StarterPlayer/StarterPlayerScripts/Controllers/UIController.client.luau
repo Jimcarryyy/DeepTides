@@ -33,6 +33,9 @@ local OxygenUpdate = Remotes:WaitForChild("OxygenUpdate") :: RemoteEvent
 local SellResult = Remotes:WaitForChild("SellResult") :: RemoteEvent
 local NotifyClient = Remotes:WaitForChild("NotifyClient") :: RemoteEvent
 local RequestUpgrade = Remotes:WaitForChild("RequestUpgrade") :: RemoteEvent
+local RequestPrestige = Remotes:WaitForChild("RequestPrestige") :: RemoteEvent
+local BossHealthUpdate = Remotes:WaitForChild("BossHealthUpdate") :: RemoteEvent
+local TestBuyProduct = Remotes:WaitForChild("TestBuyProduct") :: RemoteEvent
 
 -- UI References
 local pearlsPill = MainHUD:WaitForChild("PearlsPill", 3) :: Frame?
@@ -43,32 +46,6 @@ local bagText = bagPill and bagPill:FindFirstChild("Value") :: TextLabel?
 local bagStroke = bagPill and bagPill:FindFirstChildOfClass("UIStroke") :: UIStroke?
 
 local pvpPill = MainHUD:FindFirstChild("PvPPill") :: Frame?
-if not pvpPill and MainHUD then
-	pvpPill = Instance.new("Frame")
-	pvpPill.Name = "PvPPill"
-	pvpPill.Size = UDim2.new(0, 160, 0, 36)
-	pvpPill.Position = UDim2.new(0, 16, 0, 104)
-	pvpPill.BackgroundColor3 = Color3.fromRGB(22, 28, 38)
-	pvpPill.BackgroundTransparency = 0.2
-	pvpPill.BorderSizePixel = 0
-	pvpPill.Parent = MainHUD
-
-	local stroke = Instance.new("UIStroke")
-	stroke.Name = "Stroke"
-	stroke.Color = Color3.fromRGB(90, 105, 120)
-	stroke.Thickness = 2
-	stroke.Parent = pvpPill
-
-	local label = Instance.new("TextLabel")
-	label.Name = "Value"
-	label.Size = UDim2.new(1, 0, 1, 0)
-	label.BackgroundTransparency = 1
-	label.Text = "PVP: OFF"
-	label.TextColor3 = Color3.fromRGB(180, 195, 210)
-	label.Font = Enum.Font.FredokaOne
-	label.TextSize = 15
-	label.Parent = pvpPill
-end
 local pvpText = pvpPill and pvpPill:FindFirstChild("Value") :: TextLabel?
 local pvpStroke = pvpPill and pvpPill:FindFirstChildOfClass("UIStroke") :: UIStroke?
 
@@ -82,9 +59,26 @@ local toastMessage = toast and toast:FindFirstChild("Message") :: TextLabel?
 local toastIcon = toast and toast:FindFirstChild("Icon") :: TextLabel?
 local toastStroke = toast and toast:FindFirstChildOfClass("UIStroke") :: UIStroke?
 
+local autoO2 = MainHUD:WaitForChild("AutoOxygenPrompt", 3) :: Frame?
+local autoO2BuyBtn = autoO2 and autoO2:FindFirstChild("BuyButton") :: TextButton?
+local hasAutoPromptedO2 = false
+
 local shopModal = MainHUD:WaitForChild("GearShopModal", 3) :: Frame?
 local shopList = shopModal and shopModal:FindFirstChild("List") :: ScrollingFrame?
 local closeButton = shopModal and (shopModal:FindFirstChild("CloseButton") or shopModal:FindFirstChild("CloseButton", true)) :: TextButton?
+
+local prestigeModal = MainHUD:WaitForChild("PrestigeModal", 3) :: Frame?
+local prestigeCloseBtn = prestigeModal and (prestigeModal:FindFirstChild("CloseButton") or prestigeModal:FindFirstChild("CloseButton", true)) :: TextButton?
+local prestigeActionBtn = prestigeModal and prestigeModal:FindFirstChild("PrestigeButton") :: TextButton?
+
+local storeModal = MainHUD:WaitForChild("StoreModal", 3) :: Frame?
+local storeList = storeModal and storeModal:FindFirstChild("List") :: ScrollingFrame?
+local storeCloseBtn = storeModal and (storeModal:FindFirstChild("CloseButton") or storeModal:FindFirstChild("CloseButton", true)) :: TextButton?
+local storeButton = MainHUD:WaitForChild("StoreButton", 3) :: TextButton?
+
+local bossBar = MainHUD:WaitForChild("BossBarContainer", 3) :: Frame?
+local bossBarFill = bossBar and bossBar:FindFirstChild("BarBg") and bossBar.BarBg:FindFirstChild("Fill") :: Frame?
+local bossHPText = bossBar and bossBar:FindFirstChild("BarBg") and bossBar.BarBg:FindFirstChild("HPText") :: TextLabel?
 
 local actionBar = MainHUD:WaitForChild("CombatActionBar", 3) :: Frame?
 local slotAttack = actionBar and actionBar:FindFirstChild("Slot_Attack") :: Frame?
@@ -104,10 +98,156 @@ local currentData = {
 	DivingSuitTier = 1,
 	DivingToolTier = 1,
 	PvPEnabled = false,
+	PrestigeLevel = 0,
+	OwnedPasses = {} :: { [string]: boolean },
 }
 
 -- ===================================================================
--- 1. GEAR UPGRADE SHOP UI & POP-UP ANIMATIONS
+-- 0. DYNAMIC SCROLLING CANVAS BINDINGS (BATTLE-TESTED FIX)
+-- ===================================================================
+-- Ensures Store and Shop lists always expand to exact content height + bottom padding
+if storeList then
+	local uiList = storeList:FindFirstChildOfClass("UIListLayout")
+	if uiList then
+		local function updateStoreCanvas()
+			storeList.CanvasSize = UDim2.new(0, 0, 0, uiList.AbsoluteContentSize.Y + 28)
+		end
+		uiList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateStoreCanvas)
+		task.defer(updateStoreCanvas)
+	end
+end
+
+if shopList then
+	local uiList = shopList:FindFirstChildOfClass("UIListLayout")
+	if uiList then
+		local function updateShopCanvas()
+			shopList.CanvasSize = UDim2.new(0, 0, 0, uiList.AbsoluteContentSize.Y + 24)
+		end
+		uiList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateShopCanvas)
+		task.defer(updateShopCanvas)
+	end
+end
+
+-- ===================================================================
+-- 1. HARD UX AUTO-PROMPTS
+-- ===================================================================
+local function showAutoOxygenPrompt()
+	if not autoO2 or autoO2.Visible then return end
+	autoO2.Visible = true
+
+	TweenService:Create(autoO2, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Position = UDim2.new(0.5, 0, 0, 72)
+	}):Play()
+end
+
+local function hideAutoOxygenPrompt()
+	if not autoO2 or not autoO2.Visible then return end
+	local tweenOut = TweenService:Create(autoO2, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+		Position = UDim2.new(0.5, 0, 0, -90)
+	})
+	tweenOut:Play()
+	tweenOut.Completed:Wait()
+	autoO2.Visible = false
+end
+
+if autoO2BuyBtn then
+	autoO2BuyBtn.MouseButton1Click:Connect(function()
+		TestBuyProduct:FireServer("EmergencyOxygen")
+		hideAutoOxygenPrompt()
+	end)
+end
+
+-- ===================================================================
+-- 2. STORE MODAL (BOUNCY ANIMATION & DYNAMIC SCROLL)
+-- ===================================================================
+local STORE_FULL_SIZE = UDim2.new(0, 520, 0, 430)
+local MODAL_ZERO_SIZE = UDim2.new(0, 0, 0, 0)
+
+local function refreshStoreButtons()
+	if not storeList then return end
+
+	local gamePasses = { "DeepDiver", "TreasureHunter", "LeviathanPass" }
+	for _, passKey in ipairs(gamePasses) do
+		local row = storeList:FindFirstChild("Row_" .. passKey)
+		local buyBtn = row and row:FindFirstChild("BuyButton") :: TextButton?
+		if buyBtn then
+			if currentData.OwnedPasses and currentData.OwnedPasses[passKey] == true then
+				buyBtn.Text = "OWNED"
+				buyBtn.BackgroundColor3 = Color3.fromRGB(75, 85, 95)
+				buyBtn.AutoButtonColor = false
+			end
+		end
+	end
+end
+
+local function openStore()
+	if not storeModal or storeModal.Visible then return end
+	refreshStoreButtons()
+	storeModal.Size = MODAL_ZERO_SIZE
+	storeModal.Visible = true
+
+	TweenService:Create(storeModal, TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Size = STORE_FULL_SIZE
+	}):Play()
+end
+
+local function closeStore()
+	if not storeModal or not storeModal.Visible then return end
+	local tweenOut = TweenService:Create(storeModal, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+		Size = MODAL_ZERO_SIZE
+	})
+	tweenOut:Play()
+	tweenOut.Completed:Wait()
+	storeModal.Visible = false
+end
+
+if storeButton then storeButton.MouseButton1Click:Connect(openStore) end
+if storeCloseBtn then storeCloseBtn.MouseButton1Click:Connect(closeStore) end
+
+if storeList then
+	for _, child in ipairs(storeList:GetChildren()) do
+		if child:IsA("Frame") and child.Name:match("^Row_") then
+			local itemKey = child.Name:gsub("^Row_", "")
+			local buyBtn = child:FindFirstChild("BuyButton") :: TextButton?
+			if buyBtn then
+				buyBtn.MouseButton1Click:Connect(function()
+					if currentData.OwnedPasses and currentData.OwnedPasses[itemKey] == true then
+						return
+					end
+					TestBuyProduct:FireServer(itemKey)
+				end)
+			end
+		end
+	end
+end
+
+-- ===================================================================
+-- 3. BOSS HEALTH BAR
+-- ===================================================================
+local BOSS_TWEEN_INFO = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+BossHealthUpdate.OnClientEvent:Connect(function(curHP: number, maxHP: number, isAlive: boolean)
+	if not bossBar then return end
+
+	if isAlive and curHP > 0 then
+		bossBar.Visible = true
+		local percent = math.clamp(curHP / maxHP, 0, 1)
+
+		if bossBarFill then
+			TweenService:Create(bossBarFill, BOSS_TWEEN_INFO, {
+				Size = UDim2.new(percent, 0, 1, 0)
+			}):Play()
+		end
+
+		if bossHPText then
+			bossHPText.Text = string.format("%d / %d HP", curHP, maxHP)
+		end
+	else
+		bossBar.Visible = false
+	end
+end)
+
+-- ===================================================================
+-- 4. GEAR SHOP
 -- ===================================================================
 local catalogMap = {
 	["OxygenTank"] = { Catalog = GearConfig.OxygenTanks, Title = "Oxygen Tank", StatKey = "MaxOxygen", StatSuffix = "s Air" },
@@ -172,12 +312,10 @@ end
 
 local isShopAnimating = false
 local MODAL_FULL_SIZE = UDim2.new(0, 520, 0, 420)
-local MODAL_ZERO_SIZE = UDim2.new(0, 0, 0, 0)
 
 local function openShop()
 	if not shopModal or isShopAnimating or shopModal.Visible then return end
 	isShopAnimating = true
-
 	refreshShopMenu()
 	shopModal.Size = MODAL_ZERO_SIZE
 	shopModal.Visible = true
@@ -204,9 +342,7 @@ local function closeShop()
 	isShopAnimating = false
 end
 
-if closeButton then
-	closeButton.MouseButton1Click:Connect(closeShop)
-end
+if closeButton then closeButton.MouseButton1Click:Connect(closeShop) end
 
 if shopList then
 	for category in pairs(catalogMap) do
@@ -233,7 +369,77 @@ end
 task.defer(hookShopPrompt)
 
 -- ===================================================================
--- 2. RESPONSIVE NOTIFICATION TOAST QUEUE (ZERO UICORNER)
+-- 5. PRESTIGE MODAL
+-- ===================================================================
+local PRESTIGE_FULL_SIZE = UDim2.new(0, 480, 0, 360)
+
+local function updatePrestigeButtonState()
+	if not prestigeActionBtn then return end
+
+	local allGearsMaxed = (currentData.OxygenTankTier == 5)
+		and (currentData.LootBagTier == 5)
+		and (currentData.SpeedFinsTier == 5)
+		and (currentData.DivingSuitTier == 5)
+		and (currentData.DivingToolTier == 5)
+
+	if not allGearsMaxed then
+		prestigeActionBtn.Text = "MUST REACH TIER 5 ON ALL GEAR FIRST"
+		prestigeActionBtn.BackgroundColor3 = Color3.fromRGB(85, 95, 105)
+		prestigeActionBtn.AutoButtonColor = false
+	elseif currentData.Pearls < 50000 then
+		prestigeActionBtn.Text = string.format("NEED %d MORE PEARLS (50,000 ⚪ REQUIRED)", 50000 - currentData.Pearls)
+		prestigeActionBtn.BackgroundColor3 = Color3.fromRGB(180, 75, 75)
+		prestigeActionBtn.AutoButtonColor = false
+	else
+		prestigeActionBtn.Text = "PRESTIGE TO NEXT RANK (50,000 ⚪)"
+		prestigeActionBtn.BackgroundColor3 = Color3.fromRGB(240, 180, 45)
+		prestigeActionBtn.AutoButtonColor = true
+	end
+end
+
+local function openPrestigeModal()
+	if not prestigeModal or prestigeModal.Visible then return end
+	updatePrestigeButtonState()
+	prestigeModal.Size = MODAL_ZERO_SIZE
+	prestigeModal.Visible = true
+
+	TweenService:Create(prestigeModal, TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Size = PRESTIGE_FULL_SIZE
+	}):Play()
+end
+
+local function closePrestigeModal()
+	if not prestigeModal or not prestigeModal.Visible then return end
+	local tweenOut = TweenService:Create(prestigeModal, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+		Size = MODAL_ZERO_SIZE
+	})
+	tweenOut:Play()
+	tweenOut.Completed:Wait()
+	prestigeModal.Visible = false
+end
+
+if prestigeCloseBtn then prestigeCloseBtn.MouseButton1Click:Connect(closePrestigeModal) end
+if prestigeActionBtn then
+	prestigeActionBtn.MouseButton1Click:Connect(function()
+		RequestPrestige:FireServer()
+		closePrestigeModal()
+	end)
+end
+
+local function hookPrestigeShrinePrompt()
+	local dockArea = Workspace:WaitForChild("DockArea")
+	local shrine = dockArea:WaitForChild("PrestigeShrine", 5) :: Model?
+	if shrine and shrine.PrimaryPart then
+		local prompt = shrine.PrimaryPart:WaitForChild("PrestigePrompt", 3) :: ProximityPrompt?
+		if prompt then
+			prompt.Triggered:Connect(openPrestigeModal)
+		end
+	end
+end
+task.defer(hookPrestigeShrinePrompt)
+
+-- ===================================================================
+-- 6. RESPONSIVE NOTIFICATION TOAST
 -- ===================================================================
 local currentToastId = 0
 local function showNotification(message: string, style: string?, icon: string?)
@@ -257,7 +463,6 @@ local function showNotification(message: string, style: string?, icon: string?)
 
 	toast.Visible = true
 
-	-- Centered slide-down via AnchorPoint (0.5, 0)
 	TweenService:Create(toast, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
 		Position = UDim2.new(0.5, 0, 0, 16)
 	}):Play()
@@ -279,9 +484,7 @@ end
 
 NotifyClient.OnClientEvent:Connect(showNotification)
 
--- ===================================================================
--- 3. DEPTH ZONE ENTRY TRACKER
--- ===================================================================
+-- Depth Zone Entry Tracker
 local lastZoneId = 1
 task.spawn(function()
 	while true do
@@ -293,7 +496,7 @@ task.spawn(function()
 				local zone = ZoneConfig.GetZoneAtDepth(hrp.Position.Y)
 				if zone and zone.Id ~= lastZoneId then
 					lastZoneId = zone.Id
-					local dangerEmoji = if zone.Id == 1 then "🌊" elseif zone.Id == 2 then "🌿" else "☠️"
+					local dangerEmoji = if zone.Id == 1 then "🌊" elseif zone.Id == 2 then "🌿" elseif zone.Id == 3 then "☠️" elseif zone.Id == 4 then "🐙" else "👑"
 					showNotification(string.format("Entering Zone %d: %s (%s Danger)", zone.Id, zone.Name, zone.Danger), "Info", dangerEmoji)
 				end
 			else
@@ -303,9 +506,7 @@ task.spawn(function()
 	end
 end)
 
--- ===================================================================
--- 4. LIVE WEAPON EQUIP / UNEQUIP VISUAL TRACKER
--- ===================================================================
+-- Live Weapon Equip / Unequip Visual Tracker
 local function updateEquippedVisual()
 	local char = LocalPlayer.Character
 	if not char or not slotAttackTitle or not slotAttackStroke then return end
@@ -330,7 +531,7 @@ task.spawn(function()
 end)
 
 -- ===================================================================
--- 5. HUD & ACTION BAR UPDATES
+-- 7. HUD & OXYGEN CONTROLLER
 -- ===================================================================
 PlayerDataUpdate.OnClientEvent:Connect(function(data)
 	if data.Pearls ~= nil then
@@ -343,6 +544,11 @@ PlayerDataUpdate.OnClientEvent:Connect(function(data)
 	if data.SpeedFinsTier then currentData.SpeedFinsTier = data.SpeedFinsTier end
 	if data.DivingSuitTier then currentData.DivingSuitTier = data.DivingSuitTier end
 	if data.DivingToolTier then currentData.DivingToolTier = data.DivingToolTier end
+	if data.PrestigeLevel ~= nil then currentData.PrestigeLevel = data.PrestigeLevel end
+	if data.OwnedPasses ~= nil then
+		currentData.OwnedPasses = data.OwnedPasses
+		refreshStoreButtons()
+	end
 
 	if data.PvPEnabled ~= nil and pvpText and pvpStroke then
 		currentData.PvPEnabled = data.PvPEnabled
@@ -380,9 +586,8 @@ PlayerDataUpdate.OnClientEvent:Connect(function(data)
 		end
 	end
 
-	if shopModal and shopModal.Visible then
-		refreshShopMenu()
-	end
+	if shopModal and shopModal.Visible then refreshShopMenu() end
+	if prestigeModal and prestigeModal.Visible then updatePrestigeButtonState() end
 end)
 
 local OXYGEN_TWEEN_INFO = TweenInfo.new(0.25, Enum.EasingStyle.Linear)
@@ -409,6 +614,19 @@ OxygenUpdate.OnClientEvent:Connect(function(cur: number, max: number, isSubmerge
 			oxygenText.TextColor3 = Color3.fromRGB(255, 255, 255)
 		end
 	end
+
+	-- Hard UX Auto-Prompt: Pops within 2s of critical oxygen
+	if isSubmerged and cur <= 8 then
+		if not hasAutoPromptedO2 then
+			hasAutoPromptedO2 = true
+			showAutoOxygenPrompt()
+		end
+	else
+		if hasAutoPromptedO2 and cur > 15 then
+			hasAutoPromptedO2 = false
+			hideAutoOxygenPrompt()
+		end
+	end
 end)
 
-print("[Deep Tides] UIController: Responsive notification toast active (Zero UICorner).")
+print("[Deep Tides] UIController: Dynamic scrollbar & content height active.")

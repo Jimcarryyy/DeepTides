@@ -22,7 +22,10 @@ local requiredRemotes = {
 	"RequestUpgrade",
 	"AttackRequest",
 	"AbilityRequest",
-	"TogglePvP", -- New: PvP Opt-In Toggle
+	"TogglePvP",
+	"RequestPrestige",
+	"BossHealthUpdate",
+	"TestBuyProduct", -- New for Milestone 3 Monetisation
 }
 
 for _, remoteName in ipairs(requiredRemotes) do
@@ -54,8 +57,13 @@ RequestUpgrade.OnServerEvent:Connect(function(player: Player, gearCategory: stri
 	end
 end)
 
+local RequestPrestige = remotesFolder:WaitForChild("RequestPrestige") :: RemoteEvent
+RequestPrestige.OnServerEvent:Connect(function(player: Player)
+	PlayerDataManager.Prestige(player)
+end)
+
 -- ===================================================================
--- 3. PVP OPT-IN TOGGLE & OVERHEAD BADGES
+-- 3. PVP OPT-IN TOGGLE & BADGES
 -- ===================================================================
 local TogglePvP = remotesFolder:WaitForChild("TogglePvP") :: RemoteEvent
 local NotifyClient = remotesFolder:WaitForChild("NotifyClient") :: RemoteEvent
@@ -107,13 +115,12 @@ TogglePvP.OnServerEvent:Connect(function(player: Player)
 	PlayerDataManager.SyncClient(player)
 
 	if profile.Data.PvPEnabled then
-		NotifyClient:FireClient(player, "PVP ENABLED! (High Risk: Other players can steal your bag on ascent)", "Warning", "⚔️")
+		NotifyClient:FireClient(player, "PVP ENABLED! (High Risk: Players can steal your bag on ascent)", "Warning", "⚔️")
 	else
 		NotifyClient:FireClient(player, "PvP Disabled. Safe diving mode active.", "Info", "🛡️")
 	end
 end)
 
--- Hook physical PvP Station ProximityPrompt
 local function hookPvPStation()
 	local dockArea = Workspace:WaitForChild("DockArea")
 	local pvpStation = dockArea:WaitForChild("PvPStation", 5) :: Model?
@@ -142,7 +149,7 @@ end
 task.defer(hookPvPStation)
 
 -- ===================================================================
--- 4. PVP PLAYER-VS-PLAYER ATTACK SYSTEM
+-- 4. PVP ATTACKS
 -- ===================================================================
 local AttackRequest = remotesFolder:WaitForChild("AttackRequest") :: RemoteEvent
 local playerAttackCooldowns: { [Player]: number } = {}
@@ -154,7 +161,6 @@ AttackRequest.OnServerEvent:Connect(function(attacker: Player)
 	local attackerHum = attackerChar:FindFirstChildOfClass("Humanoid")
 	if not attackerHRP or not attackerHum or attackerHum.Health <= 0 then return end
 
-	-- Check if attacker has PvP enabled
 	local attackerProfile = PlayerDataManager.GetProfile(attacker)
 	if not attackerProfile or not attackerProfile.Data.PvPEnabled then return end
 
@@ -166,7 +172,6 @@ AttackRequest.OnServerEvent:Connect(function(attacker: Player)
 	if now - lastAttack < toolConfig.Cooldown then return end
 	playerAttackCooldowns[attacker] = now
 
-	-- Check for nearby target players who ALSO have PvP enabled
 	local ATTACK_RANGE = 12.0
 	for _, target in ipairs(Players:GetPlayers()) do
 		if target ~= attacker then
@@ -178,11 +183,12 @@ AttackRequest.OnServerEvent:Connect(function(attacker: Player)
 				if targetHRP and targetHum and targetHum.Health > 0 and targetHRP.Position.Y < 0.5 then
 					local dist = (targetHRP.Position - attackerHRP.Position).Magnitude
 					if dist <= ATTACK_RANGE then
-						-- Calculate damage with target's Iron Skin shield reduction
 						local baseDmg = toolConfig.Damage
 						local finalDmg = baseDmg
-						if targetChar:GetAttribute("IronSkinActive") == true then
-							finalDmg = math.ceil(baseDmg * 0.4)
+
+						local shieldReduction = targetChar:GetAttribute("ShieldReduction")
+						if typeof(shieldReduction) == "number" and shieldReduction > 0 then
+							finalDmg = math.ceil(baseDmg * (1 - shieldReduction))
 							NotifyClient:FireClient(target, string.format("Shield Blocked Hit! Took %d dmg from %s", finalDmg, attacker.Name), "Success", "🛡️")
 						else
 							NotifyClient:FireClient(target, string.format("Attacked by %s! (-%d HP)", attacker.Name, finalDmg), "Warning", "⚔️")
@@ -190,7 +196,6 @@ AttackRequest.OnServerEvent:Connect(function(attacker: Player)
 
 						targetHum:TakeDamage(finalDmg)
 						NotifyClient:FireClient(attacker, string.format("Hit %s for %d damage!", target.Name, finalDmg), "Success", "🗡️")
-						print(string.format("[PvP] %s hit %s for %d damage! (HP: %d)", attacker.Name, target.Name, finalDmg, targetHum.Health))
 						break
 					end
 				end
@@ -204,6 +209,36 @@ end)
 -- ===================================================================
 local AbilityRequest = remotesFolder:WaitForChild("AbilityRequest") :: RemoteEvent
 local playerAbilityCooldowns: { [Player]: number } = {}
+
+local function createVisualShield(char: Model, hrp: BasePart, color: Color3, duration: number)
+	local oldShield = char:FindFirstChild("SuitAbilityShield")
+	if oldShield then oldShield:Destroy() end
+
+	local shield = Instance.new("Part")
+	shield.Name = "SuitAbilityShield"
+	shield.Shape = Enum.PartType.Ball
+	shield.Size = Vector3.new(8.0, 8.0, 8.0)
+	shield.CFrame = hrp.CFrame
+	shield.Material = Enum.Material.Neon
+	shield.Color = color
+	shield.Transparency = 0.55
+	shield.Anchored = false
+	shield.CanCollide = false
+	shield.Massless = true
+	shield.Parent = char
+
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = hrp
+	weld.Part1 = shield
+	weld.Parent = shield
+
+	task.delay(duration, function()
+		if char and char.Parent then
+			local s = char:FindFirstChild("SuitAbilityShield")
+			if s then s:Destroy() end
+		end
+	end)
+end
 
 AbilityRequest.OnServerEvent:Connect(function(player: Player)
 	local char = player.Character
@@ -219,19 +254,19 @@ AbilityRequest.OnServerEvent:Connect(function(player: Player)
 	if suitTier == 1 then
 		NotifyClient:FireClient(player, "Tier 1 Wetsuit has no ability! Upgrade at Gear Shop.", "Warning", "🛡️")
 		return
-	end
 
-	if suitTier == 2 then
+	elseif suitTier == 2 then
 		if now - lastUsed < 12 then
 			local remain = math.ceil(12 - (now - lastUsed))
 			NotifyClient:FireClient(player, string.format("Speed Surge on cooldown (%ds)", remain), "Warning", "⏳")
 			return
 		end
 		playerAbilityCooldowns[player] = now
-
 		NotifyClient:FireClient(player, "SPEED SURGE! (+150% Swim Speed for 4s)", "Success", "⚡")
+
 		local origSpeed = hum.WalkSpeed
 		hum.WalkSpeed = origSpeed * 2.2
+		createVisualShield(char, hrp, Color3.fromRGB(60, 220, 140), 4.0)
 
 		task.delay(4.0, function()
 			if hum and hum.Parent then hum.WalkSpeed = origSpeed end
@@ -244,38 +279,51 @@ AbilityRequest.OnServerEvent:Connect(function(player: Player)
 			return
 		end
 		playerAbilityCooldowns[player] = now
-
 		NotifyClient:FireClient(player, "IRON SKIN ACTIVE! (-60% Damage Shield for 6s)", "Success", "🛡️")
-		char:SetAttribute("IronSkinActive", true)
 
-		local oldShield = char:FindFirstChild("IronSkinShield")
-		if oldShield then oldShield:Destroy() end
-
-		local shield = Instance.new("Part")
-		shield.Name = "IronSkinShield"
-		shield.Shape = Enum.PartType.Ball
-		shield.Size = Vector3.new(7.5, 7.5, 7.5)
-		shield.CFrame = hrp.CFrame
-		shield.Material = Enum.Material.Neon
-		shield.Color = Color3.fromRGB(75, 205, 255)
-		shield.Transparency = 0.65
-		shield.CanCollide = false
-		shield.Massless = true
-		shield.Parent = char
-
-		local weld = Instance.new("WeldConstraint")
-		weld.Part0 = hrp
-		weld.Part1 = shield
-		weld.Parent = shield
+		char:SetAttribute("ShieldReduction", 0.60)
+		createVisualShield(char, hrp, Color3.fromRGB(75, 205, 255), 6.0)
 
 		task.delay(6.0, function()
-			if char and char.Parent then
-				char:SetAttribute("IronSkinActive", false)
-				local currentShield = char:FindFirstChild("IronSkinShield")
-				if currentShield then currentShield:Destroy() end
-			end
+			if char and char.Parent then char:SetAttribute("ShieldReduction", 0) end
+		end)
+
+	elseif suitTier == 4 then
+		if now - lastUsed < 18 then
+			local remain = math.ceil(18 - (now - lastUsed))
+			NotifyClient:FireClient(player, string.format("Thermal Barrier on cooldown (%ds)", remain), "Warning", "⏳")
+			return
+		end
+		playerAbilityCooldowns[player] = now
+		NotifyClient:FireClient(player, "THERMAL BARRIER! (-70% Damage Shield for 7s)", "Success", "🔥")
+
+		char:SetAttribute("ShieldReduction", 0.70)
+		createVisualShield(char, hrp, Color3.fromRGB(255, 140, 45), 7.0)
+
+		task.delay(7.0, function()
+			if char and char.Parent then char:SetAttribute("ShieldReduction", 0) end
+		end)
+
+	elseif suitTier >= 5 then
+		if now - lastUsed < 20 then
+			local remain = math.ceil(20 - (now - lastUsed))
+			NotifyClient:FireClient(player, string.format("Leviathan Aura on cooldown (%ds)", remain), "Warning", "⏳")
+			return
+		end
+		playerAbilityCooldowns[player] = now
+		NotifyClient:FireClient(player, "LEVIATHAN AURA! (-80% Shield + 2x Speed for 8s)", "Success", "👑")
+
+		char:SetAttribute("ShieldReduction", 0.80)
+		createVisualShield(char, hrp, Color3.fromRGB(220, 80, 255), 8.0)
+
+		local origSpeed = hum.WalkSpeed
+		hum.WalkSpeed = origSpeed * 2.0
+
+		task.delay(8.0, function()
+			if char and char.Parent then char:SetAttribute("ShieldReduction", 0) end
+			if hum and hum.Parent then hum.WalkSpeed = origSpeed end
 		end)
 	end
 end)
 
-print("[Deep Tides] Server initialized with full PvP Opt-In and Bag Intercept backend.")
+print("[Deep Tides] ServerInit: Monetization remotes active.")

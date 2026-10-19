@@ -38,45 +38,61 @@ local function setupSellStation(station: Instance)
 
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.ActionText = "Sell All Loot"
-	prompt.ObjectText = "Sell Station"
+	prompt.ObjectText = "Sell Shop"
 	prompt.HoldDuration = 0.25
 	prompt.MaxActivationDistance = 12
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = targetPart
 
 	prompt.Triggered:Connect(function(player: Player)
-		local bag = PlayerDataManager.GetBag(player)
-		
-		-- Validation: Empty Bag Check
+		local profile = PlayerDataManager.GetProfile(player)
+		if not profile then return end
+		local bag = profile.Data.LootBag
+
 		if #bag == 0 then
 			NotifyClient:FireClient(player, "Your bag is empty! Dive down to find loot.", "Warning", "⚠️")
 			prompt.ObjectText = "[Bag is Empty!]"
 			task.delay(1.5, function()
 				if prompt and prompt.Parent then
-					prompt.ObjectText = "Sell Station"
+					prompt.ObjectText = "Sell Shop"
 				end
 			end)
 			return
 		end
 
-		local totalValue = 0
+		local baseValue = 0
 		local itemCount = #bag
 
 		for _, item in ipairs(bag) do
-			totalValue += (item.BaseValue or 10)
+			baseValue += (item.BaseValue or 10)
 		end
 
-		-- Clear bag and credit Pearls
+		-- Multipliers:
+		-- 1. Prestige Multiplier (+10% per Prestige Rank)
+		local prestigeRank = profile.Data.PrestigeLevel or 0
+		local prestigeMultiplier = 1 + (prestigeRank * 0.10)
+
+		-- 2. Treasure Hunter Game Pass (+25% Sell Value)
+		local hasTreasureHunter = PlayerDataManager.HasPass(player, "TreasureHunter")
+		local passMultiplier = if hasTreasureHunter then 1.25 else 1.0
+
+		local totalValue = math.floor(baseValue * prestigeMultiplier * passMultiplier)
+
 		PlayerDataManager.ClearBag(player)
 		PlayerDataManager.AddPearls(player, totalValue)
 
 		SellResult:FireClient(player, totalValue, itemCount)
-		NotifyClient:FireClient(player, string.format("+%d Pearls! (%d items sold)", totalValue, itemCount), "Success", "💰")
+
+		local bonusText = ""
+		if prestigeRank > 0 then bonusText ..= string.format(" (+%d%% Prestige)", prestigeRank * 10) end
+		if hasTreasureHunter then bonusText ..= " (+25% Pass Bonus)" end
+
+		NotifyClient:FireClient(player, string.format("+%d Pearls! (%d items sold)%s", totalValue, itemCount, bonusText), "Success", "💰")
 
 		prompt.ObjectText = string.format("[Sold %d Items for +%d Pearls!]", itemCount, totalValue)
 		task.delay(2, function()
 			if prompt and prompt.Parent then
-				prompt.ObjectText = "Sell Station"
+				prompt.ObjectText = "Sell Shop"
 			end
 		end)
 	end)
@@ -100,4 +116,4 @@ DockArea.ChildAdded:Connect(function(child)
 	end
 end)
 
-print("[Deep Tides] SellServer: Validations & Notifications connected.")
+print("[Deep Tides] SellServer: Treasure Hunter +25% Pass bonus active.")

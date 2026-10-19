@@ -11,6 +11,7 @@ local PlayerDataManager = require(ServerScriptService.Core.PlayerDataManager)
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local NotifyClient = Remotes:WaitForChild("NotifyClient") :: RemoteEvent
 local AttackRequest = Remotes:WaitForChild("AttackRequest") :: RemoteEvent
+local BossHealthUpdate = Remotes:WaitForChild("BossHealthUpdate") :: RemoteEvent
 
 local CreatureModels = ReplicatedStorage:WaitForChild("CreatureModels")
 
@@ -24,7 +25,7 @@ end
 type CreatureInstance = {
 	Id: number,
 	Model: Model,
-	Type: "Jellyfish" | "ElectricEel" | "HammerheadShark",
+	Type: "Jellyfish" | "ElectricEel" | "HammerheadShark" | "GiantOctopus" | "TheLeviathan",
 	Health: number,
 	MaxHealth: number,
 	PearlReward: number,
@@ -42,8 +43,50 @@ type CreatureInstance = {
 
 local activeCreatures: { [number]: CreatureInstance } = {}
 local creatureCounter = 0
+local leviathanBoss: CreatureInstance? = nil
 
--- Helper to apply damage considering Iron Skin shield
+-- Spawns the massive golden Leviathan Treasure Vault upon boss defeat
+local function spawnLeviathanVault(seafloorPos: Vector3)
+	local vault = Instance.new("Part")
+	vault.Name = "LeviathanTreasureVault"
+	vault.Size = Vector3.new(6.0, 4.0, 4.5)
+	vault.Position = seafloorPos
+	vault.Material = Enum.Material.Plastic
+	vault.TopSurface = Enum.SurfaceType.Studs
+	vault.Color = Color3.fromRGB(255, 215, 60)
+	vault.Anchored = true
+	vault.CanCollide = true
+	vault.Parent = Workspace
+
+	local light = Instance.new("PointLight")
+	light.Color = Color3.fromRGB(255, 215, 60)
+	light.Range = 24
+	light.Brightness = 4.0
+	light.Parent = vault
+
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.ActionText = "Claim Vault"
+	prompt.ObjectText = "★ LEVIATHAN TREASURE VAULT (+5,000 ⚪) ★"
+	prompt.HoldDuration = 0.5
+	prompt.MaxActivationDistance = 14
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = vault
+
+	local claimed = false
+	prompt.Triggered:Connect(function(player: Player)
+		if claimed then return end
+		claimed = true
+
+		PlayerDataManager.AddPearls(player, 5000)
+		NotifyClient:FireClient(player, "CLAIMED LEVIATHAN VAULT! (+5,000 Pearls)", "Success", "👑")
+		vault:Destroy()
+	end)
+
+	task.delay(180, function()
+		if vault and vault.Parent then vault:Destroy() end
+	end)
+end
+
 local function applyCreatureDamage(player: Player, baseDamage: number, creatureName: string, icon: string)
 	local char = player.Character
 	if not char then return end
@@ -51,11 +94,11 @@ local function applyCreatureDamage(player: Player, baseDamage: number, creatureN
 	if not hum or hum.Health <= 0 then return end
 
 	local finalDamage = baseDamage
-	local isShielded = char:GetAttribute("IronSkinActive") == true
+	local shieldReduction = char:GetAttribute("ShieldReduction")
 
-	if isShielded then
-		finalDamage = math.ceil(baseDamage * 0.4) -- 60% damage reduction!
-		NotifyClient:FireClient(player, string.format("Shield Blocked Hit! Took %d dmg from %s (Shielded)", finalDamage, creatureName), "Success", "🛡️")
+	if typeof(shieldReduction) == "number" and shieldReduction > 0 then
+		finalDamage = math.ceil(baseDamage * (1 - shieldReduction))
+		NotifyClient:FireClient(player, string.format("Shield Absorbed Hit! Took %d dmg from %s", finalDamage, creatureName), "Success", "🛡️")
 	else
 		NotifyClient:FireClient(player, string.format("Hit by %s! (-%d HP)", creatureName, finalDamage), "Warning", icon)
 	end
@@ -88,7 +131,9 @@ local function getClosestSubmergedPlayer(origin: Vector3, maxRadius: number): (P
 	return closestPlayer, closestHRP, closestDist
 end
 
--- Spawners
+-- ===================================================================
+-- CREATURE SPAWNERS
+-- ===================================================================
 local function spawnJellyfish(pos: Vector3, angleOffset: number)
 	creatureCounter += 1
 	local id = creatureCounter
@@ -99,22 +144,11 @@ local function spawnJellyfish(pos: Vector3, angleOffset: number)
 	model.Parent = ActiveCreaturesFolder
 
 	activeCreatures[id] = {
-		Id = id,
-		Model = model,
-		Type = "Jellyfish",
-		Health = 25,
-		MaxHealth = 25,
-		PearlReward = 20,
-		BasePos = pos,
-		CurrentPos = pos,
-		State = "Patrol",
-		Speed = 2.0,
-		Damage = 12,
-		HitRadius = 3.6,
-		AggroRadius = 0,
-		PatrolAngle = angleOffset,
-		PatrolRadius = 5.0,
-		CooldownUntil = 0,
+		Id = id, Model = model, Type = "Jellyfish",
+		Health = 25, MaxHealth = 25, PearlReward = 20,
+		BasePos = pos, CurrentPos = pos, State = "Patrol",
+		Speed = 2.0, Damage = 12, HitRadius = 3.6, AggroRadius = 0,
+		PatrolAngle = angleOffset, PatrolRadius = 5.0, CooldownUntil = 0,
 	}
 end
 
@@ -128,22 +162,11 @@ local function spawnElectricEel(pos: Vector3, angleOffset: number)
 	model.Parent = ActiveCreaturesFolder
 
 	activeCreatures[id] = {
-		Id = id,
-		Model = model,
-		Type = "ElectricEel",
-		Health = 60,
-		MaxHealth = 60,
-		PearlReward = 50,
-		BasePos = pos,
-		CurrentPos = pos,
-		State = "Patrol",
-		Speed = 16.0,
-		Damage = 25,
-		HitRadius = 4.2,
-		AggroRadius = 24.0,
-		PatrolAngle = angleOffset,
-		PatrolRadius = 18.0,
-		CooldownUntil = 0,
+		Id = id, Model = model, Type = "ElectricEel",
+		Health = 60, MaxHealth = 60, PearlReward = 50,
+		BasePos = pos, CurrentPos = pos, State = "Patrol",
+		Speed = 16.0, Damage = 25, HitRadius = 4.2, AggroRadius = 24.0,
+		PatrolAngle = angleOffset, PatrolRadius = 18.0, CooldownUntil = 0,
 	}
 end
 
@@ -157,44 +180,89 @@ local function spawnHammerheadShark(pos: Vector3)
 	model.Parent = ActiveCreaturesFolder
 
 	activeCreatures[id] = {
-		Id = id,
-		Model = model,
-		Type = "HammerheadShark",
-		Health = 150,
-		MaxHealth = 150,
-		PearlReward = 150,
-		BasePos = pos,
-		CurrentPos = pos,
-		State = "Patrol",
-		Speed = 24.0,
-		Damage = 45,
-		HitRadius = 5.5,
-		AggroRadius = 36.0,
-		PatrolAngle = 0,
-		PatrolRadius = 26.0,
-		CooldownUntil = 0,
+		Id = id, Model = model, Type = "HammerheadShark",
+		Health = 150, MaxHealth = 150, PearlReward = 150,
+		BasePos = pos, CurrentPos = pos, State = "Patrol",
+		Speed = 24.0, Damage = 45, HitRadius = 5.5, AggroRadius = 36.0,
+		PatrolAngle = 0, PatrolRadius = 26.0, CooldownUntil = 0,
 	}
+end
+
+local function spawnGiantOctopus(pos: Vector3)
+	creatureCounter += 1
+	local id = creatureCounter
+	local template = CreatureModels:WaitForChild("GiantOctopus") :: Model
+	local model = template:Clone()
+	model:PivotTo(CFrame.new(pos))
+	model:SetAttribute("CreatureId", id)
+	model.Parent = ActiveCreaturesFolder
+
+	activeCreatures[id] = {
+		Id = id, Model = model, Type = "GiantOctopus",
+		Health = 300, MaxHealth = 300, PearlReward = 350,
+		BasePos = pos, CurrentPos = pos, State = "Patrol",
+		Speed = 12.0, Damage = 35, HitRadius = 7.5, AggroRadius = 32.0,
+		PatrolAngle = 0, PatrolRadius = 16.0, CooldownUntil = 0,
+	}
+end
+
+-- SPAWN THE LEVIATHAN (ZONE 5 WORLD BOSS: 1500 HP)
+local function spawnTheLeviathan(pos: Vector3)
+	creatureCounter += 1
+	local id = creatureCounter
+	local template = CreatureModels:WaitForChild("TheLeviathan") :: Model
+	local model = template:Clone()
+	model:PivotTo(CFrame.new(pos))
+	model:SetAttribute("CreatureId", id)
+	model.Parent = ActiveCreaturesFolder
+
+	local bossInstance: CreatureInstance = {
+		Id = id, Model = model, Type = "TheLeviathan",
+		Health = 1500, MaxHealth = 1500, PearlReward = 2000,
+		BasePos = pos, CurrentPos = pos, State = "Patrol",
+		Speed = 18.0, Damage = 45, HitRadius = 9.0, AggroRadius = 45.0,
+		PatrolAngle = 0, PatrolRadius = 22.0, CooldownUntil = 0,
+	}
+
+	activeCreatures[id] = bossInstance
+	leviathanBoss = bossInstance
+
+	-- Alert all players that the boss has emerged
+	BossHealthUpdate:FireAllClients(1500, 1500, true)
+	print("[Boss] The Leviathan has spawned in Zone 5 (Depth: -540)!")
 end
 
 local function initAllCreatures()
 	ActiveCreaturesFolder:ClearAllChildren()
 	activeCreatures = {}
 
+	-- Zone 1: 4 Jellyfish
 	spawnJellyfish(Vector3.new(12, -28, 12), 0)
 	spawnJellyfish(Vector3.new(-14, -36, 10), 1.5)
 	spawnJellyfish(Vector3.new(10, -42, -15), 3.0)
 	spawnJellyfish(Vector3.new(-12, -48, -12), 4.5)
 
+	-- Zone 2: 2 Electric Eels
 	spawnElectricEel(Vector3.new(0, -92, 0), 0)
 	spawnElectricEel(Vector3.new(0, -120, 0), math.pi)
 
+	-- Zone 3: 1 Hammerhead Shark (Y = -215)
 	spawnHammerheadShark(Vector3.new(0, -215, 0))
-	print("[Creatures] CreatureServer active with Iron Skin shield defense.")
+
+	-- Zone 4: 1 Giant Octopus (Y = -320)
+	spawnGiantOctopus(Vector3.new(0, -320, 0))
+
+	-- Zone 5: 1 The Leviathan (Y = -540)
+	spawnTheLeviathan(Vector3.new(0, -540, 0))
+
+	print("[Creatures] Full Creature ecosystem + The Leviathan active across all 5 zones!")
 end
 
 task.defer(initAllCreatures)
 
--- Player Weapon Attacks against Creatures
+-- ===================================================================
+-- COMBAT SYSTEM (ATTACKING CREATURES & THE LEVIATHAN)
+-- ===================================================================
 local playerAttackCooldowns: { [Player]: number } = {}
 
 AttackRequest.OnServerEvent:Connect(function(player: Player)
@@ -212,7 +280,7 @@ AttackRequest.OnServerEvent:Connect(function(player: Player)
 	if now - lastAttack < toolConfig.Cooldown then return end
 	playerAttackCooldowns[player] = now
 
-	local ATTACK_RANGE = 12.0
+	local ATTACK_RANGE = 16.0
 	local closestCreature: CreatureInstance? = nil
 	local closestDist = ATTACK_RANGE
 
@@ -235,6 +303,11 @@ AttackRequest.OnServerEvent:Connect(function(player: Player)
 			player.Name, closestCreature.Type, toolConfig.Damage, math.max(0, closestCreature.Health), closestCreature.MaxHealth
 		))
 
+		-- Update Leviathan Boss Bar if hitting the Leviathan
+		if closestCreature.Type == "TheLeviathan" then
+			BossHealthUpdate:FireAllClients(math.max(0, closestCreature.Health), closestCreature.MaxHealth, true)
+		end
+
 		local prim = closestCreature.Model.PrimaryPart
 		if prim then
 			local oldColor = prim.Color
@@ -244,31 +317,45 @@ AttackRequest.OnServerEvent:Connect(function(player: Player)
 			end)
 		end
 
+		-- Defeat Logic
 		if closestCreature.Health <= 0 then
 			closestCreature.State = "Dead"
 			local reward = closestCreature.PearlReward
 			local creatureName = closestCreature.Type
+			local cType = closestCreature.Type
+			local bPos = closestCreature.BasePos
 
 			PlayerDataManager.AddPearls(player, reward)
 			NotifyClient:FireClient(player, string.format("Defeated %s! (+%d Pearls)", creatureName, reward), "Success", "⚔️")
+
+			-- If The Leviathan is defeated: Spawn the massive Treasure Vault!
+			if cType == "TheLeviathan" then
+				BossHealthUpdate:FireAllClients(0, 1500, false)
+				spawnLeviathanVault(Vector3.new(0, -590, 0))
+				NotifyClient:FireClient(player, "THE LEVIATHAN HAS FALLEN! Treasure Vault opened on the seabed!", "Success", "👑")
+			end
+
 			closestCreature.Model:Destroy()
 
-			local cType = closestCreature.Type
-			local bPos = closestCreature.BasePos
-			task.delay(15, function()
+			-- Respawn timer
+			task.delay(20, function()
 				if cType == "Jellyfish" then
 					spawnJellyfish(bPos, math.random() * math.pi)
 				elseif cType == "ElectricEel" then
 					spawnElectricEel(bPos, math.random() * math.pi)
 				elseif cType == "HammerheadShark" then
 					spawnHammerheadShark(bPos)
+				elseif cType == "GiantOctopus" then
+					spawnGiantOctopus(bPos)
+				elseif cType == "TheLeviathan" then
+					spawnTheLeviathan(bPos)
 				end
 			end)
 		end
 	end
 end)
 
--- Creature AI Loop
+-- AI Loop
 local clock = 0
 RunService.Heartbeat:Connect(function(dt: number)
 	clock += dt
@@ -280,6 +367,7 @@ RunService.Heartbeat:Connect(function(dt: number)
 		local primary = model.PrimaryPart
 		if not primary or not model.Parent then continue end
 
+		-- 1. JELLYFISH
 		if creature.Type == "Jellyfish" then
 			local bobY = math.sin(clock * 1.5 + creature.PatrolAngle) * 3.5
 			local driftX = math.cos(clock * 0.4 + creature.PatrolAngle) * creature.PatrolRadius
@@ -294,6 +382,7 @@ RunService.Heartbeat:Connect(function(dt: number)
 				applyCreatureDamage(player, creature.Damage, "Jellyfish", "⚡")
 			end
 
+		-- 2. ELECTRIC EEL
 		elseif creature.Type == "ElectricEel" then
 			local player, hrp, dist = getClosestSubmergedPlayer(primary.Position, creature.AggroRadius)
 
@@ -325,6 +414,7 @@ RunService.Heartbeat:Connect(function(dt: number)
 				model:PivotTo(CFrame.lookAt(targetPos, lookTarget))
 			end
 
+		-- 3. HAMMERHEAD SHARK
 		elseif creature.Type == "HammerheadShark" then
 			local player, hrp, dist = getClosestSubmergedPlayer(primary.Position, creature.AggroRadius)
 
@@ -342,6 +432,64 @@ RunService.Heartbeat:Connect(function(dt: number)
 				local patrolX = math.cos(creature.PatrolAngle) * creature.PatrolRadius
 				local patrolZ = math.sin(creature.PatrolAngle) * creature.PatrolRadius
 				local targetPos = creature.BasePos + Vector3.new(patrolX, math.sin(clock) * 1.5, patrolZ)
+				local lookTarget = targetPos + Vector3.new(-math.sin(creature.PatrolAngle), 0, math.cos(creature.PatrolAngle))
+				model:PivotTo(CFrame.lookAt(targetPos, lookTarget))
+			end
+
+		-- 4. GIANT OCTOPUS
+		elseif creature.Type == "GiantOctopus" then
+			local player, hrp, dist = getClosestSubmergedPlayer(primary.Position, creature.AggroRadius)
+
+			if player and hrp and now > creature.CooldownUntil then
+				local dir = (hrp.Position - primary.Position).Unit
+				local nextPos = primary.Position + (dir * creature.Speed * dt)
+				model:PivotTo(CFrame.lookAt(nextPos, hrp.Position))
+
+				if dist <= creature.HitRadius then
+					creature.CooldownUntil = now + 4.0
+					applyCreatureDamage(player, creature.Damage, "Giant Octopus", "🐙")
+
+					local char = player.Character
+					local hum = char and char:FindFirstChildOfClass("Humanoid")
+					if hum then
+						NotifyClient:FireClient(player, "BLINDED BY INK CLOUD! (-50% Swim Speed)", "Warning", "🖤")
+						local currentSpeed = hum.WalkSpeed
+						hum.WalkSpeed = math.max(8, currentSpeed * 0.5)
+
+						task.delay(2.5, function()
+							if hum and hum.Parent then hum.WalkSpeed = currentSpeed end
+						end)
+					end
+				end
+			else
+				creature.PatrolAngle += 0.3 * dt
+				local patrolX = math.cos(creature.PatrolAngle) * creature.PatrolRadius
+				local patrolZ = math.sin(creature.PatrolAngle) * creature.PatrolRadius
+				local targetPos = creature.BasePos + Vector3.new(patrolX, math.sin(clock * 1.2) * 2.5, patrolZ)
+				local lookTarget = targetPos + Vector3.new(-math.sin(creature.PatrolAngle), 0, math.cos(creature.PatrolAngle))
+				model:PivotTo(CFrame.lookAt(targetPos, lookTarget))
+			end
+
+		-- 5. THE LEVIATHAN (ZONE 5 WORLD RAID BOSS)
+		elseif creature.Type == "TheLeviathan" then
+			local player, hrp, dist = getClosestSubmergedPlayer(primary.Position, creature.AggroRadius)
+
+			if player and hrp and now > creature.CooldownUntil then
+				-- Aggressive boss pursuit
+				local dir = (hrp.Position - primary.Position).Unit
+				local nextPos = primary.Position + (dir * creature.Speed * dt)
+				model:PivotTo(CFrame.lookAt(nextPos, hrp.Position))
+
+				if dist <= creature.HitRadius then
+					creature.CooldownUntil = now + 3.0
+					applyCreatureDamage(player, creature.Damage, "The Leviathan", "👑")
+				end
+			else
+				-- Massive undulating serpent coil in the dark Zone 5 depths
+				creature.PatrolAngle += 0.25 * dt
+				local patrolX = math.cos(creature.PatrolAngle) * creature.PatrolRadius
+				local patrolZ = math.sin(creature.PatrolAngle) * creature.PatrolRadius
+				local targetPos = creature.BasePos + Vector3.new(patrolX, math.sin(clock * 0.8) * 4.0, patrolZ)
 				local lookTarget = targetPos + Vector3.new(-math.sin(creature.PatrolAngle), 0, math.cos(creature.PatrolAngle))
 				model:PivotTo(CFrame.lookAt(targetPos, lookTarget))
 			end

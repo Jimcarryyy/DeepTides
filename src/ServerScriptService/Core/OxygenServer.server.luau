@@ -29,9 +29,13 @@ local function onCharacterAdded(player: Player, character: Model)
 	local tankTier = PlayerDataManager.GetTankTier(player)
 	local tankConfig = GearConfig.OxygenTanks[tankTier] or GearConfig.OxygenTanks[1]
 
+	-- Deep Diver Game Pass doubles max oxygen capacity!
+	local passMultiplier = if PlayerDataManager.HasPass(player, "DeepDiver") then 2 else 1
+	local totalMaxOxygen = tankConfig.MaxOxygen * passMultiplier
+
 	playerStates[player] = {
-		Current = tankConfig.MaxOxygen,
-		Max = tankConfig.MaxOxygen,
+		Current = totalMaxOxygen,
+		Max = totalMaxOxygen,
 		DrainRate = tankConfig.DrainRate,
 		RefillRate = tankConfig.RefillRate,
 		IsSubmerged = false,
@@ -70,7 +74,6 @@ for _, player in ipairs(Players:GetPlayers()) do
 	task.spawn(onPlayerAdded, player)
 end
 
--- Server Heartbeat loop
 local SYNC_INTERVAL = 0.25
 local timeSinceLastSync = 0
 
@@ -87,13 +90,16 @@ RunService.Heartbeat:Connect(function(dt: number)
 
 		if not humanoid or humanoid.Health <= 0 or not hrp then continue end
 
-		-- 1. LIVE TANK SYNC (Reflects shop upgrades immediately without respawning)
+		-- Live Tank Sync + Deep Diver Pass Multiplier
 		local currentTankTier = PlayerDataManager.GetTankTier(player)
 		local currentSuitTier = PlayerDataManager.GetSuitTier(player)
 		local tankConfig = GearConfig.OxygenTanks[currentTankTier] or GearConfig.OxygenTanks[1]
 
-		if state.Max ~= tankConfig.MaxOxygen then
-			state.Max = tankConfig.MaxOxygen
+		local passMultiplier = if PlayerDataManager.HasPass(player, "DeepDiver") then 2 else 1
+		local expectedMax = tankConfig.MaxOxygen * passMultiplier
+
+		if state.Max ~= expectedMax then
+			state.Max = expectedMax
 			state.DrainRate = tankConfig.DrainRate
 			state.RefillRate = tankConfig.RefillRate
 			if not state.IsSubmerged then
@@ -101,7 +107,13 @@ RunService.Heartbeat:Connect(function(dt: number)
 			end
 		end
 
-		-- 2. Submergence Detection
+		-- Instant Developer Product Refill (Emergency Oxygen)
+		if player:GetAttribute("RefillOxygenNow") == true then
+			player:SetAttribute("RefillOxygenNow", nil)
+			state.Current = state.Max
+			OxygenUpdate:FireClient(player, state.Current, state.Max, state.IsSubmerged)
+		end
+
 		local isSwimming = humanoid:GetState() == Enum.HumanoidStateType.Swimming
 		local isBelowSurface = hrp.Position.Y < ZoneConfig.WATER_SURFACE_Y
 		local isSubmerged = isSwimming or isBelowSurface
@@ -112,10 +124,8 @@ RunService.Heartbeat:Connect(function(dt: number)
 			local currentZone = ZoneConfig.GetZoneAtDepth(hrp.Position.Y)
 			local drainMultiplier = if currentZone then currentZone.OxygenDrainMultiplier else 1.0
 
-			-- Drain oxygen
 			state.Current = math.max(0, state.Current - (state.DrainRate * drainMultiplier * dt))
 
-			-- Drowning Damage (out of oxygen)
 			if state.Current <= 0 then
 				if os.clock() - state.LastDrownTick >= 1 then
 					state.LastDrownTick = os.clock()
@@ -123,8 +133,11 @@ RunService.Heartbeat:Connect(function(dt: number)
 				end
 			end
 
-			-- 3. DEPTH PRESSURE HAZARD (Suit Tier Protection)
-			local isCrushing, pressureDmg, pressureMsg = ZoneConfig.CheckPressureHazard(hrp.Position.Y, currentSuitTier)
+			-- Leviathan Pass grants immunity to Zone 5 pressure!
+			local hasLeviathanPass = PlayerDataManager.HasPass(player, "LeviathanPass")
+			local effectiveSuitTier = if hasLeviathanPass then 5 else currentSuitTier
+
+			local isCrushing, pressureDmg, pressureMsg = ZoneConfig.CheckPressureHazard(hrp.Position.Y, effectiveSuitTier)
 			if isCrushing then
 				if os.clock() - state.LastPressureTick >= 1.5 then
 					state.LastPressureTick = os.clock()
@@ -135,11 +148,9 @@ RunService.Heartbeat:Connect(function(dt: number)
 				end
 			end
 		else
-			-- Refill oxygen at surface
 			state.Current = math.min(state.Max, state.Current + (state.RefillRate * dt))
 		end
 
-		-- Sync to client HUD
 		if shouldSync then
 			OxygenUpdate:FireClient(player, math.round(state.Current * 10) / 10, state.Max, state.IsSubmerged)
 		end
@@ -150,4 +161,4 @@ RunService.Heartbeat:Connect(function(dt: number)
 	end
 end)
 
-print("[Deep Tides] OxygenServer: Live 120s Tank & Depth Pressure Hazards active.")
+print("[Deep Tides] OxygenServer: Deep Diver 2x Pass & Emergency Refill active.")

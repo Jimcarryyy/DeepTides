@@ -46,7 +46,6 @@ local function spawnLootItem(spawnNode: BasePart)
 	if templateModel then
 		lootModel = templateModel:Clone()
 	else
-		-- Built-in studded 3D model generator for new zone items
 		lootModel = Instance.new("Model")
 		lootModel.Name = lootData.Id
 
@@ -64,9 +63,10 @@ local function spawnLootItem(spawnNode: BasePart)
 			p.Size = Vector3.new(2.4, 0.8, 1.4)
 		elseif lootData.Id:match("cutlass") then
 			p.Size = Vector3.new(0.4, 3.4, 0.8)
-		elseif lootData.Id:match("skull") then
+		elseif lootData.Id:match("skull") or lootData.Id:match("pearl") or lootData.Id:match("eye") or lootData.Id:match("heart") then
 			p.Shape = Enum.PartType.Ball
-			p.Size = Vector3.new(2.0, 2.0, 2.0)
+			p.Size = Vector3.new(2.2, 2.2, 2.2)
+			p.Material = Enum.Material.Neon
 		else
 			p.Size = Vector3.new(2.0, 1.4, 2.0)
 		end
@@ -156,4 +156,4 @@ for _, child in ipairs(LootSpawnsFolder:GetChildren()) do
 end
 LootSpawnsFolder.ChildAdded:Connect(checkNode)
 
-print("[Deep Tides] LootServer: Multi-zone drops active across Zones 1, 2, and 3.")
+print("[Deep Tides] LootServer: 5-Zone drops active down to -600 studs.")

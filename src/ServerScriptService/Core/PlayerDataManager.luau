@@ -23,6 +23,7 @@ local ProfileTemplate = {
 	LootBag = {} :: { { Id: string, Name: string, BaseValue: number, Rarity: string } },
 	PrestigeLevel = 0,
 	PvPEnabled = false,
+	OwnedPasses = {} :: { [string]: boolean }, -- Tracks Game Pass ownership!
 }
 
 local DATASTORE_KEY = "DeepTides_PlayerData_v1"
@@ -37,55 +38,44 @@ local catalogMap = {
 	["DivingTool"] = "DivingTools",
 }
 
--- Spawns a floating loot chest in the water containing a defeated PvP player's bag
-local function spawnPvPLootDrop(deathCFrame: CFrame, stolenLoot: { { Id: string, Name: string, BaseValue: number, Rarity: string } })
-	local chest = Instance.new("Part")
-	chest.Name = "PvP_LootChest"
-	chest.Size = Vector3.new(2.6, 1.8, 2.0)
-	chest.CFrame = deathCFrame
-	chest.Material = Enum.Material.Plastic
-	chest.TopSurface = Enum.SurfaceType.Studs
-	chest.Color = Color3.fromRGB(180, 50, 50) -- Glowing crimson chest
-	chest.Anchored = true
-	chest.CanCollide = false
-	chest.Parent = Workspace
+local ROMAN_NUMERALS = { "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X" }
 
-	local prompt = Instance.new("ProximityPrompt")
-	prompt.ActionText = "Steal Loot Bag"
-	prompt.ObjectText = string.format("Dropped Bag (%d Items)", #stolenLoot)
-	prompt.HoldDuration = 0.3
-	prompt.MaxActivationDistance = 12
-	prompt.RequiresLineOfSight = false
-	prompt.Parent = chest
+local function updatePrestigeBadge(player: Player, prestigeRank: number)
+	local char = player.Character
+	if not char then return end
+	local head = char:FindFirstChild("Head") :: BasePart?
+	if not head then return end
 
-	local isClaimed = false
-	prompt.Triggered:Connect(function(looter: Player)
-		if isClaimed then return end
+	local oldBadge = head:FindFirstChild("PrestigeCrest")
+	if oldBadge then oldBadge:Destroy() end
 
-		local looterProfile = Profiles[looter]
-		if not looterProfile or not looterProfile.Data.PvPEnabled then
-			NotifyClient:FireClient(looter, "Only PvP-enabled divers can steal dropped bags!", "Warning", "⚠️")
-			return
-		end
+	if prestigeRank > 0 then
+		local roman = ROMAN_NUMERALS[math.clamp(prestigeRank, 1, 10)] or tostring(prestigeRank)
+		local bboard = Instance.new("BillboardGui")
+		bboard.Name = "PrestigeCrest"
+		bboard.Size = UDim2.new(0, 140, 0, 26)
+		bboard.StudsOffset = Vector3.new(0, 3.8, 0)
+		bboard.AlwaysOnTop = true
+		bboard.Parent = head
 
-		isClaimed = true
-		local itemsAdded = 0
-		for _, item in ipairs(stolenLoot) do
-			local success = PlayerDataManager.AddToBag(looter, item)
-			if success then itemsAdded += 1 end
-		end
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.new(1, 0, 1, 0)
+		label.BackgroundColor3 = Color3.fromRGB(24, 20, 12)
+		label.BackgroundTransparency = 0.2
+		label.BorderSizePixel = 0
+		label.Text = string.format("★ PRESTIGE %s ★", roman)
+		label.TextColor3 = Color3.fromRGB(255, 215, 60)
+		label.Font = Enum.Font.FredokaOne
+		label.TextSize = 13
+		label.Parent = bboard
 
-		NotifyClient:FireClient(looter, string.format("STOLE %d ITEMS FROM DROPPED BAG!", itemsAdded), "Success", "💰")
-		chest:Destroy()
-	end)
-
-	-- Auto-despawn after 2 minutes if unclaimed
-	task.delay(120, function()
-		if chest and chest.Parent then chest:Destroy() end
-	end)
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = Color3.fromRGB(255, 215, 60)
+		stroke.Thickness = 1.5
+		stroke.Parent = label
+	end
 end
 
--- Equips physical weapon safely
 local function equipDivingTool(player: Player, toolTier: number)
 	local char = player.Character
 	if not char then return end
@@ -128,9 +118,12 @@ local function applyGearBuffs(player: Player, profileData: any)
 
 	local finsTier = profileData.SpeedFinsTier or 1
 	local finsConfig = GearConfig.SpeedFins[finsTier] or GearConfig.SpeedFins[1]
-	humanoid.WalkSpeed = 16 * finsConfig.SwimMultiplier
+
+	local prestigeSpeedBonus = 1 + ((profileData.PrestigeLevel or 0) * 0.05)
+	humanoid.WalkSpeed = 16 * finsConfig.SwimMultiplier * prestigeSpeedBonus
 
 	equipDivingTool(player, profileData.DivingToolTier or 1)
+	updatePrestigeBadge(player, profileData.PrestigeLevel or 0)
 end
 
 function PlayerDataManager.SyncClient(player: Player)
@@ -139,6 +132,10 @@ function PlayerDataManager.SyncClient(player: Player)
 
 	local bagTier = profile.Data.LootBagTier or 1
 	local bagConfig = GearConfig.LootBags[bagTier] or GearConfig.LootBags[1]
+
+	-- Treasure Hunter Game Pass grants +1 extra slot
+	local extraSlots = if PlayerDataManager.HasPass(player, "TreasureHunter") then 1 else 0
+	local totalCapacity = bagConfig.Capacity + extraSlots
 
 	applyGearBuffs(player, profile.Data)
 
@@ -151,8 +148,10 @@ function PlayerDataManager.SyncClient(player: Player)
 		DivingToolTier = profile.Data.DivingToolTier or 1,
 		LootBag = profile.Data.LootBag,
 		BagCount = #profile.Data.LootBag,
-		BagCapacity = bagConfig.Capacity,
+		BagCapacity = totalCapacity,
 		PvPEnabled = profile.Data.PvPEnabled or false,
+		PrestigeLevel = profile.Data.PrestigeLevel or 0,
+		OwnedPasses = profile.Data.OwnedPasses or {},
 	})
 end
 
@@ -171,27 +170,12 @@ function PlayerDataManager.OnPlayerAdded(player: Player)
 
 		if player:IsDescendantOf(Players) then
 			Profiles[player] = profile
-			print(string.format("[PlayerDataManager] Loaded profile for %s (Pearls: %d)", player.Name, profile.Data.Pearls))
+			print(string.format("[PlayerDataManager] Loaded profile for %s (Pearls: %d, Prestige: %d)", player.Name, profile.Data.Pearls, profile.Data.PrestigeLevel or 0))
 			PlayerDataManager.SyncClient(player)
 
 			player.CharacterAdded:Connect(function(char)
 				task.wait(0.25)
 				applyGearBuffs(player, profile.Data)
-
-				-- Handle Death in PvP Mode: Drop loot bag
-				local humanoid = char:WaitForChild("Humanoid") :: Humanoid
-				local hrp = char:WaitForChild("HumanoidRootPart") :: BasePart
-
-				humanoid.Died:Connect(function()
-					if profile.Data.PvPEnabled and #profile.Data.LootBag > 0 and hrp.Position.Y < 0.5 then
-						local droppedLoot = profile.Data.LootBag
-						profile.Data.LootBag = {}
-						PlayerDataManager.SyncClient(player)
-
-						spawnPvPLootDrop(hrp.CFrame, droppedLoot)
-						NotifyClient:FireClient(player, "DEFEATED IN PVP! Your loot bag was dropped in the water!", "Warning", "☠️")
-					end
-				end)
 			end)
 		else
 			profile:Release()
@@ -212,6 +196,89 @@ end
 
 function PlayerDataManager.GetProfile(player: Player)
 	return Profiles[player]
+end
+
+-- ===================================================================
+-- GAME PASS OWNERSHIP API
+-- ===================================================================
+function PlayerDataManager.HasPass(player: Player, passName: string): boolean
+	local profile = Profiles[player]
+	if not profile then return false end
+	return profile.Data.OwnedPasses and (profile.Data.OwnedPasses[passName] == true)
+end
+
+function PlayerDataManager.AwardPass(player: Player, passName: string): boolean
+	local profile = Profiles[player]
+	if not profile then return false end
+
+	if not profile.Data.OwnedPasses then
+		profile.Data.OwnedPasses = {}
+	end
+
+	profile.Data.OwnedPasses[passName] = true
+	PlayerDataManager.SyncClient(player)
+	return true
+end
+
+-- ===================================================================
+-- PRESTIGE & GEAR API
+-- ===================================================================
+local PRESTIGE_COST = 50000
+local MAX_PRESTIGE = 10
+
+function PlayerDataManager.Prestige(player: Player): (boolean, string?)
+	local profile = Profiles[player]
+	if not profile then return false, "No active profile" end
+
+	local currentPrestige = profile.Data.PrestigeLevel or 0
+	if currentPrestige >= MAX_PRESTIGE then
+		NotifyClient:FireClient(player, "Maximum Prestige rank (Rank X) reached!", "Warning", "★")
+		return false, "Maximum Prestige rank reached"
+	end
+
+	local tankTier = profile.Data.OxygenTankTier or 1
+	local bagTier = profile.Data.LootBagTier or 1
+	local finsTier = profile.Data.SpeedFinsTier or 1
+	local suitTier = profile.Data.DivingSuitTier or 1
+	local toolTier = profile.Data.DivingToolTier or 1
+
+	if tankTier < 5 or bagTier < 5 or finsTier < 5 or suitTier < 5 or toolTier < 5 then
+		local missing = {}
+		if tankTier < 5 then table.insert(missing, "Tank") end
+		if bagTier < 5 then table.insert(missing, "Bag") end
+		if finsTier < 5 then table.insert(missing, "Fins") end
+		if suitTier < 5 then table.insert(missing, "Suit") end
+		if toolTier < 5 then table.insert(missing, "Tool") end
+
+		local errorMsg = string.format("Cannot Prestige! Must max all gear to Tier 5 (Missing: %s)", table.concat(missing, ", "))
+		NotifyClient:FireClient(player, errorMsg, "Warning", "⚠️")
+		return false, errorMsg
+	end
+
+	if profile.Data.Pearls < PRESTIGE_COST then
+		local errorMsg = string.format("Need %d Pearls to Prestige (You have: %d)", PRESTIGE_COST, profile.Data.Pearls)
+		NotifyClient:FireClient(player, errorMsg, "Warning", "⚪")
+		return false, errorMsg
+	end
+
+	profile.Data.Pearls -= PRESTIGE_COST
+	profile.Data.PrestigeLevel = currentPrestige + 1
+
+	profile.Data.OxygenTankTier = 1
+	profile.Data.LootBagTier = 1
+	profile.Data.SpeedFinsTier = 1
+	profile.Data.DivingSuitTier = 1
+	profile.Data.DivingToolTier = 1
+	profile.Data.LootBag = {}
+
+	PlayerDataManager.SyncClient(player)
+	updatePrestigeBadge(player, profile.Data.PrestigeLevel)
+
+	local roman = ROMAN_NUMERALS[profile.Data.PrestigeLevel] or tostring(profile.Data.PrestigeLevel)
+	NotifyClient:FireClient(player, string.format("PRESTIGE COMPLETE! You are now Prestige %s (+%d%% Value, +%d%% Speed)", roman, profile.Data.PrestigeLevel * 10, profile.Data.PrestigeLevel * 5), "Success", "★")
+	print(string.format("[Prestige] %s prestiged to Rank %d! (Remaining: %d Pearls)", player.Name, profile.Data.PrestigeLevel, profile.Data.Pearls))
+
+	return true, nil
 end
 
 function PlayerDataManager.UpgradeGear(player: Player, gearCategory: string): (boolean, string?)
@@ -268,7 +335,8 @@ function PlayerDataManager.GetBagCapacity(player: Player): number
 	local profile = Profiles[player]
 	local tier = if profile then profile.Data.LootBagTier else 1
 	local bagConfig = GearConfig.LootBags[tier] or GearConfig.LootBags[1]
-	return bagConfig.Capacity
+	local extraSlots = if PlayerDataManager.HasPass(player, "TreasureHunter") then 1 else 0
+	return bagConfig.Capacity + extraSlots
 end
 
 function PlayerDataManager.AddToBag(player: Player, lootItem: { Id: string, Name: string, BaseValue: number, Rarity: string }): (boolean, string?)
