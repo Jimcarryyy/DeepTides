@@ -1,37 +1,49 @@
----
+# CURRENT TASK: Phase 2 Milestone B - UI/UX Overhaul, Underwater VFX & Audio
 
-### 3. `docs/CURRENT_TASK.md`
-
-```markdown
-# Current Task: Milestone 1–3 Complete & Client Review
-
-## Goal
-Milestones 1 to 3 are fully implemented, debugged, and verified in Roblox Studio. Prepare the demo for client review (Lemar Bentley), confirm milestone sign-off, and establish Contract 2 ($660 AUD) for the final art and polish phase.
+**Milestone:** Phase 2 - Milestone B ($264 AUD)  
+**Status:** ACTIVE  
+**Goal:** Take the approved 3D world foundation and deliver a commercial-grade UI/UX overhaul across all screens (*Grow a Garden* / *Steal an Egg* benchmark), rich underwater lighting and atmospheric VFX, and complete sound design polish.
 
 ---
 
-## Completed Tasks (Milestones 1 to 3)
-- [x] **Milestone 1:** Surface dock, Zone 1 Shallow Reef, Oxygen depletion loop, Loot collection, Dock sell station, ProfileService persistence, Main HUD.
-- [x] **Milestone 2:** Zones 2 & 3 (Kelp Forest, Shipwreck), 5-Tier Gear Upgrade Shop, Creature AI (Jellyfish, Eel, Shark), Tool combat.
-- [x] **Milestone 3:** Zones 4 & 5 (Abyss, Cursed Deep), World Boss (The Leviathan) + Golden Vault, Opt-in PvP system, Suit abilities, Underwater Dodge Dash, Prestige system (Rank X), Full Monetisation suite with 2s automatic prompts.
-- [x] **Integration & Bug Fixes:**
-  - Connected `LootMagnetActive` attribute for double pickup reach.
-  - Connected `GuaranteedRare` drop upgrade and resolved loot pool indexing error.
-  - Resolved DataStore serialization failure by sanitizing loot items to clean primitives.
-  - Implemented physical seabed loot bag dropping upon PvP defeat.
-  - Implemented anti-duplication safeguard for Revive Tokens (`HideRevivePrompt`).
-  - Implemented PvE death loot loss so drowning and creature deaths have real stakes.
-  - Created pre-built `AutoRevivePrompt` in `StarterGui.MainHUD` with uniform styling.
-  - Set `MainHUD.ResetOnSpawn = false` to preserve HUD references across deaths.
-  - Shortened Gear Shop modal labels to eliminate button overlap.
-  - Gated the Leviathan boss bar to Zone 5 (`Y <= -400 studs`).
-  - Added Prestige Rank X button lockout.
-  - Converted overhead badges (`PVP` and `PRESTIGE X`) to clean, text-only floating tags.
-  - Fixed Electric Eel and Giant Octopus status effects to cleanly restore gear speed via `PlayerDataManager.ResetWalkSpeed()`.
+## Active Sub-Tasks:
+
+### Step 1: UI/UX Redesign (*Grow a Garden* Clean Aesthetic)
+- [ ] **Main HUD Overhaul:**
+  - [ ] Redesign Pearls & Bag counter pills with clean 2D studded frames and soft drop strokes.
+  - [ ] Redesign Oxygen meter gauge with color alert states (Cyan ➔ Amber ➔ Red pulse at <15s).
+  - [ ] Redesign Combat Action Bar (Attack, Ability [Iron Skin], Dodge Dash) with cooldown sweeps.
+  - [ ] Redesign PvP status pill / overhead text tag.
+- [ ] **Modal Screens Redesign:**
+  - [ ] Redesign Gear Upgrade Shop modal (2D studded container, clean tier cards, custom icons).
+  - [ ] Redesign Prestige Shrine confirmation modal.
+  - [ ] Redesign PvP Death & 30s Revive Countdown popup.
+  - [ ] Redesign Notification toasts (auto-widening with icons).
+- [ ] **Cross-Platform Responsive Layout:**
+  - [ ] Test layout scaling on Mobile touch, Tablet, PC widescreen, and Console gamepad virtual cursor.
+
+### Step 2: Underwater Atmospheric Lighting & Particle VFX
+- [ ] **Zone Depth Transitions:**
+  - [ ] Configure depth-based Atmosphere, Fog, and WaterColor shifts across all 5 zones.
+  - [ ] Add soft volumetric light shafts / god rays in Zone 1 Shallow Reef.
+- [ ] **Particle Systems:**
+  - [ ] Swimming bubble trails and diving air tank exhaust.
+  - [ ] Floating silt / marine snow in Zone 2 Kelp Forest.
+  - [ ] Volcanic floating embers in Zone 5 Cursed Deep.
+  - [ ] Pressure hazard screen vignette when diving deep without adequate diving suits.
+
+### Step 3: Sound Design Polish
+- [ ] Zone-based ambient audio tracks (Surface waves, shallow reef melody, eerie deep trench tone).
+- [ ] Underwater muffled audio filter on submerged camera.
+- [ ] Sound FX triggers: item pickup bubble chime, sell register bell, creature attacks, tool swings, button pops.
 
 ---
 
-## Next Steps
-1. **Client Review:** Lemar tests Milestone 3 and signs off on completion.
-2. **Milestone 3 Payout:** Release of Milestone 3 payment ($186 AUD).
-3. **Setup Contract 2 ($660 AUD):** Final commercial polish contract covering custom 3D models (dock, creatures, tools), UI/UX art overhaul, water VFX, lighting, and audio design.
+## Definition of Done for Milestone B:
+1. Every screen and HUD element matches the clean, rounded *Grow a Garden* benchmark.
+2. All underwater zones feature distinct atmospheric lighting, fog, and particle VFX.
+3. Full soundscape is wired to game events and approved by Lemar Bentley.
+4. Triggers Milestone B payout ($264 AUD via Wise).
+
+## Blockers:
+- None. Milestone A approved.

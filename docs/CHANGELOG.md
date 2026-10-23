@@ -63,3 +63,41 @@ All notable changes to the Deep Tides project are documented in this file.
 - Surface dock sell station with Pearl currency crediting.
 - ProfileService session-locking persistence.
 - MainHUD with Pearls counter, Bag counter, and Oxygen meter.
+
+## [0.4.0] - 2026-10-23
+### Phase 2: Milestone A (Commercial 3D Assets & Environment) - APPROVED ($198 AUD)
+#### Added
+- **Surface Hub Island Polish:**
+  - Constructed 2-tone warm dimmed lawn using signature 3D bumpy studs (`Material.Plastic`, `TopSurface = Studs`).
+  - Built 18-stud tall architectural wood perimeter walls with 360-degree studs and invisible anti-void safety caps.
+  - Built 4 detailed wooden boardwalk lagoon docks with sloping timber planks, underwater support pilings, nautical rope bollards, and warm diving lanterns.
+  - Populated island with studded palm tree groves, cargo crate/barrel stacks, shrub clusters, and lantern bollards.
+  - Added modular 2-tone scatterable sand patches (`Workspace.Island.SandPatches`) with template models for easy in-Studio duplication.
+- **Full PitWalls System (Zones 1–5):**
+  - Sliced all 48 columns across the 600-stud dive shaft into solid 1-color-per-zone walls featuring signature 3D bumpy studs.
+  - Zone progression palette: Sunlit Sand (Z1) ➔ Golden Olive (Z2) ➔ Bloodwood Rust (Z3) ➔ Abyssal Violet-Slate (Z4) ➔ Cursed Magma Sienna (Z5).
+- **Underwater Environment Props (Zones 1–5):**
+  - **Zone 1 (Shallow Reef):** 20 coral clusters, brain corals, staghorn antlers, table coral shelves, 2 giant clam shrines with glowing pearls, 2 swim-through arches, anemone gardens, and sunken carved tiki heads.
+  - **Zone 2 (Kelp Forest):** 6x 65-stud towering kelp stalk landmarks, glowing lime bulbs, holdfast boulders, 3 ancient temple columns, a sunken rowboat caught in the canopy, and glowing barrel sponges.
+  - **Zone 3 (Sunken Shipwreck):** Sunken Spanish Galleon hull at Y = -238, glowing Captain's Cabin, snapped 55-stud mast with crow's nest, cannons, anchor, mid-water debris, and 2 hanging gibbet cages with cursed skulls.
+  - **Zone 4 (The Abyss):** Hydrothermal smoker vents, bioluminescent crystal clusters, trench ledges, 2 cyclopean kraken monoliths with glowing violet rune eyes, and tiered shelf fungi.
+  - **Zone 5 (The Cursed Deep):** 42-stud Ancient Leviathan Ribcage Tunnel, Colossal Horned Skull (swimmable mouth), 3 vertical 160-stud lava cascades, magma spires, chained dragon talons, and solid seafloor plate at Y = -600.
+- **World Containers:**
+  - Built non-glitching Barnacled Treasure Chest and Floating PvP Loot Chest (zero Z-fighting, clearance offsets, layered crossing chains, welded).
+- **Loot Models (12 Total across Zones 1–3):**
+  - Integrated custom 3D Meshy meshes for all 12 collectible drops in `ReplicatedStorage.LootModels`.
+  - Mapped models to exact `LootConfig.Id` keys: `seashell`, `starfish`, `rusty_coin`, `small_chest`, `glowing_kelp`, `pearl_oyster`, `ancient_amphora`, `emerald_geode`, `galleon_gold`, `pirate_cutlass`, `ship_chronometer`, `cursed_skull_relic`.
+- **Diving Tools (Tiers 1–5):**
+  - Upgraded all 5 tools in `ReplicatedStorage.Tools` with custom 3D Meshy meshes, scaled to hand size (2.8 to 5.8 studs), and welded to `Handle`.
+- **Client Review Exhibition Gallery:**
+  - Deployed `Workspace.Client_MilestoneA_Showcase` behind Spawn displaying all creatures, tools, loot, and chests with distance-gated 3D nameplates.
+- **2D Studded UI Prototype:**
+  - Built interactive prototype in `StarterGui.StuddedUI_Prototype` verifying 2D tiled studs (`rbxassetid://1347065099`), thick `UIStroke` borders, and responsive spring animations for Milestone B.
+
+#### Fixed
+- **Prestige Shrine & PvP Station Prompts:** Fixed fatal `nil.PrimaryPart` error in `ServerInit` and `UIController` by assigning `PrimaryPart = Mesh_0`, setting `RequiresLineOfSight = false`, and normalizing model names.
+- **Loot Server Fallback Blocks:** Fixed spawner falling back to procedural default blocks by matching `ReplicatedStorage.LootModels` names to `LootConfig.Id` strings.
+- **Showcase Player Freezing Bug:** Eliminated player character lockup on weapon display by removing `Tool` classes from the exhibition and using visual `Model`s only with `CanTouch = false`.
+- **Lighting & Glare Audit:** Reduced blinding glare by lowering `Lighting.Brightness = 1.8`, setting `ExposureCompensation = -0.2`, raising `Bloom.Threshold = 1.25`, and globally clamping all workspace `PointLight`s to 0.7 max brightness.
+
+---

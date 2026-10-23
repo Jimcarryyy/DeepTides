@@ -39,3 +39,23 @@
 ### ADR 010: Pre-Built GUI in StarterGui Over Runtime Instantiation
 - **Decision:** Construct and style UI frames (such as `AutoRevivePrompt`) inside `StarterGui.MainHUD` first, keeping `UIController` strictly for event wiring and tween animations. Set `MainHUD.ResetOnSpawn = false`.
 - **Why:** Preserves uniform visual polish, prevents runtime GUI reference breakage upon character death, and allows rapid in-Studio inspection.
+
+### ADR 011: Signature 3D Bumpy Studs as Unified Visual Identity
+- **Decision:** Enforce `Material = Enum.Material.Plastic` and `TopSurface = Enum.SurfaceType.Studs` across all visible horizontal and flat faces of terrain, walls, stalls, props, docks, and chests.
+- **Why:** Delivers the chunky, tactile toy-like aesthetic benchmarked from *Steal an Egg*, establishing a cohesive visual signature across the entire game.
+
+### ADR 012: Non-Breaking VisualMesh Injection for Tools & Loot
+- **Decision:** Maintain existing root parts (`Handle`, `Blade`, `Tip`, `BarbCenter`, `Core`, `CoinPart`) as invisible collisionless anchors (`Transparency = 1`, `CanCollide = false`). Scale and weld new custom 3D Meshy meshes directly to the root part with `WeldConstraint`.
+- **Why:** Guarantees 100% backward compatibility with Phase 1 combat, animations, server raycasts, and pickup listeners without modifying a single line of backend codebase.
+
+### ADR 013: Server-Authoritative Loot Model ID Mapping
+- **Decision:** Name template models in `ReplicatedStorage.LootModels` to match `LootConfig.Id` strings (`galleon_gold`, `glowing_kelp`, `small_chest`, etc.) rather than display names, while maintaining display name aliases.
+- **Why:** `ServerScriptService.Core.LootServer` indexes templates via `lootData.Id`. Mismatched names previously caused the spawner to fall back to generating default blocky shapes on the fly.
+
+### ADR 014: Solid Single-Color Zone PitWalls Over Dense Tiled Slicing
+- **Decision:** Subdivide the 48 cylinder columns into 5 solid vertical zone tiers (240 parts total) colored with a distinct signature tone per zone, rather than thousands of dense checkerboard slices.
+- **Why:** Slicing thousands of small wall tiles caused visual noise and depth-fog glare underwater. Single-color studded zone walls provide clean readability, eliminate seams, and maintain 60 FPS performance on mobile devices.
+
+### ADR 015: Tool Class Exclusion in Display Showcases
+- **Decision:** Never use the `Tool` class inside visual world exhibitions or showcase galleries. Cloned display weapons must use plain `Model`s containing `MeshPart`s with `CanTouch = false`.
+- **Why:** Roblox's default character controller auto-equips unanchored or touched `Tool` instances. If the tool handle is anchored in a display, the player's arm welds to the anchored part, permanently freezing the character in place.

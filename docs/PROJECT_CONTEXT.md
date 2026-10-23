@@ -89,3 +89,15 @@ Each category features 5 upgrade tiers:
   - `RareDive` (149 R$): Guarantees Rare+ drop on next pickup.
 - **UX Compliance:** Automatic pop-up for Emergency Oxygen triggers within 2s of critical oxygen (<= 8s). Automatic pop-up for Revive Token triggers within 2s of PvP defeat.
 - **Studio Support:** `MonetizationConfig.TEST_MODE = true` allows in-Studio purchase testing without spending real Robux.
+
+
+## Project Overview
+- **Game:** Deep Tides (Ocean diving simulator with optional PvP)
+- **Tagline:** "Dive deep. Find rare. Get home alive."
+- **Platforms:** PC, Mobile, Console (Cross-platform controls active)
+- **Client:** Lemar Bentley (Confidential)
+- **Publishing Account:** DeepTidesDev
+- **Phase 1 Contract:** $620 AUD across 3 Milestones (Completed & Approved)
+- **Phase 2 Contract (Active):** $660 AUD across 3 Milestones (M-A: $198 [Approved], M-B: $264 [Active], M-C: $198 [Pending])
+- **Visual References:** *Steal an Egg* (assets, creatures, proportions) & *Grow a Garden* (UI cleanliness, environment quality).
+- **Strict Scope Exclusion:** Thumbnail artwork is 100% excluded.
