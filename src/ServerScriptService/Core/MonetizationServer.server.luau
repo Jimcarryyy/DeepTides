@@ -1,133 +1,154 @@
 --!strict
+-- MonetizationServer.server.luau
+-- Server-authoritative purchase handling, receipt validation, and Studio test simulation.
+
 local Players = game:GetService("Players")
 local MarketplaceService = game:GetService("MarketplaceService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
-local Workspace = game:GetService("Workspace")
-local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
 
-local MonetizationConfig = require(ReplicatedStorage.Config.MonetizationConfig)
 local PlayerDataManager = require(ServerScriptService.Core.PlayerDataManager)
-local LootConfig = require(ReplicatedStorage.Config.LootConfig)
+local MonetizationConfig = require(ReplicatedStorage.Config.MonetizationConfig)
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
+local TestBuyProduct = Remotes:WaitForChild("TestBuyProduct") :: RemoteEvent
 local NotifyClient = Remotes:WaitForChild("NotifyClient") :: RemoteEvent
+local HideRevivePrompt = Remotes:WaitForChild("HideRevivePrompt") :: RemoteEvent
 
-local function fulfillPurchase(player: Player, itemKey: string): boolean
-	local char = player.Character
+-- Helper: Grant Developer Product Rewards
+local function grantProductReward(player: Player, itemKey: string, productConfig: any)
+	local profile = PlayerDataManager.GetProfile(player)
+	if not profile then return end
 
-	-- 1. DEVELOPER PRODUCTS
-	if itemKey == "EmergencyOxygen" then
-		player:SetAttribute("RefillOxygenNow", true)
-		NotifyClient:FireClient(player, "EMERGENCY OXYGEN USED! Tank refilled to 100%!", "Success", "🤿")
-		print(string.format("[Monetization] %s used Emergency Oxygen!", player.Name))
-		return true
-
-	elseif itemKey == "ReviveToken" then
-		local lastDropped = player:GetAttribute("LastDroppedLoot")
-		if not lastDropped or typeof(lastDropped) ~= "string" then
-			NotifyClient:FireClient(player, "TOO LATE! Your loot was already claimed!", "Warning", "⚠️")
-			return false
-		end
-
-		-- Despawn physical bag from seabed so nobody else can claim it
-		local activeLoot = Workspace:FindFirstChild("ActiveLoot")
-		if activeLoot then
-			local droppedBag = activeLoot:FindFirstChild("DroppedBag_" .. player.Name)
-			if droppedBag then
-				droppedBag:Destroy()
-			end
-		end
-
-		local success, recoveredItems = pcall(function()
-			return HttpService:JSONDecode(lastDropped)
-		end)
-
-		if success and typeof(recoveredItems) == "table" then
-			local recoveredCount = 0
-			for _, item in ipairs(recoveredItems) do
-				local added = PlayerDataManager.AddToBag(player, item)
-				if added then
-					recoveredCount += 1
-				end
-			end
-			NotifyClient:FireClient(player, string.format("REVIVE TOKEN USED! Recovered %d items!", recoveredCount), "Success", "🎒")
-		end
-
-		player:SetAttribute("LastDroppedLoot", nil)
-		return true
-
-	elseif itemKey == "StarterPack" then
-		PlayerDataManager.AddPearls(player, 500)
-		local uncommonLoot = LootConfig.Zone2Loot[1]
-		PlayerDataManager.AddToBag(player, uncommonLoot)
-		NotifyClient:FireClient(player, "STARTER PACK CLAIMED! (+500 Pearls + Uncommon Loot)", "Success", "🎁")
-		return true
-
-	elseif itemKey == "LootMagnet" then
-		if char then
-			char:SetAttribute("LootMagnetActive", true)
-			NotifyClient:FireClient(player, "LOOT MAGNET ACTIVE! 2x Collection Reach for this dive!", "Success", "🧲")
-		end
-		return true
-
-	elseif itemKey == "RareDive" then
-		player:SetAttribute("GuaranteedRare", true)
-		NotifyClient:FireClient(player, "RARE DIVE ACTIVE! Guaranteed Rare+ drop on next pickup!", "Success", "⭐")
-		return true
-
-	-- 2. GAME PASSES
-	elseif itemKey == "DeepDiver" then
-		PlayerDataManager.AwardPass(player, "DeepDiver")
-		NotifyClient:FireClient(player, "DEEP DIVER PASS UNLOCKED! (Permanently 2x Oxygen Capacity)", "Success", "⚡")
-		return true
-
-	elseif itemKey == "TreasureHunter" then
-		PlayerDataManager.AwardPass(player, "TreasureHunter")
-		NotifyClient:FireClient(player, "TREASURE HUNTER PASS UNLOCKED! (+25% Sell Value & +1 Slot)", "Success", "💰")
-		return true
-
-	elseif itemKey == "LeviathanPass" then
-		PlayerDataManager.AwardPass(player, "LeviathanPass")
-		NotifyClient:FireClient(player, "LEVIATHAN PASS UNLOCKED! (Instant Zone 5 Pressure Immunity)", "Success", "👑")
-		return true
+	if not profile.Data.OwnedPasses then
+		profile.Data.OwnedPasses = {}
 	end
 
-	return false
+	if itemKey == "StarterPack" then
+		-- Strictly 1-Time Purchase Check
+		if profile.Data.OwnedPasses["StarterPack"] == true then
+			return
+		end
+		profile.Data.OwnedPasses["StarterPack"] = true
+		profile.Data.Pearls = (profile.Data.Pearls or 0) + 500
+
+		local char = player.Character
+		if char then
+			char:SetAttribute("CurrentOxygen", 9999)
+		end
+		player:SetAttribute("CurrentOxygen", 9999)
+	elseif itemKey == "EmergencyOxygen" then
+		-- Instantly refill oxygen to 100%
+		local char = player.Character
+		if char then
+			char:SetAttribute("CurrentOxygen", 9999)
+		end
+		player:SetAttribute("CurrentOxygen", 9999)
+	elseif itemKey == "ReviveToken" then
+		-- Cancel death drop / restore bag
+		HideRevivePrompt:FireClient(player)
+		player:SetAttribute("HasReviveToken", true)
+	elseif itemKey == "LootMagnet" then
+		-- 2x pickup reach until surfacing
+		player:SetAttribute("LootMagnetActive", true)
+	elseif itemKey == "RareDive" then
+		-- Guarantees a Rare+ drop on next dive
+		player:SetAttribute("GuaranteedRareDrop", true)
+	end
 end
 
+-- ===================================================================
+-- 1. STUDIO TEST SIMULATION & TESTING HANDLER
+-- ===================================================================
+TestBuyProduct.OnServerEvent:Connect(function(player: Player, itemKey: string)
+	local profile = PlayerDataManager.GetProfile(player)
+	if not profile then return end
+
+	if not profile.Data.OwnedPasses then
+		profile.Data.OwnedPasses = {}
+	end
+
+	local passConfig = MonetizationConfig.GamePasses[itemKey]
+	local productConfig = MonetizationConfig.DevProducts[itemKey]
+
+	if passConfig then
+		if passConfig.AssetId and passConfig.AssetId > 0 and not RunService:IsStudio() then
+			MarketplaceService:PromptGamePassPurchase(player, passConfig.AssetId)
+		else
+			if profile.Data.OwnedPasses[itemKey] == true then
+				return -- Already owned
+			end
+
+			profile.Data.OwnedPasses[itemKey] = true
+			PlayerDataManager.SyncClient(player)
+
+			NotifyClient:FireClient(player, "Unlocked " .. passConfig.Name .. "!", "Success", "👑")
+			print(string.format("[Monetization] Studio Test: Granted GamePass '%s' to %s", itemKey, player.Name))
+		end
+	elseif productConfig then
+		if itemKey == "StarterPack" and profile.Data.OwnedPasses["StarterPack"] == true then
+			return -- Already purchased Starter Pack!
+		end
+
+		if productConfig.ProductId and productConfig.ProductId > 0 and not RunService:IsStudio() then
+			MarketplaceService:PromptProductPurchase(player, productConfig.ProductId)
+		else
+			grantProductReward(player, itemKey, productConfig)
+			PlayerDataManager.SyncClient(player)
+
+			NotifyClient:FireClient(player, "Purchased " .. productConfig.Name .. "!", "Success", "📦")
+			print(string.format("[Monetization] Studio Test: Granted Product '%s' to %s", itemKey, player.Name))
+		end
+	end
+end)
+
+-- ===================================================================
+-- 2. PRODUCTION MARKETPLACESERVICE RECEIPT VALIDATION
+-- ===================================================================
 MarketplaceService.ProcessReceipt = function(receiptInfo)
 	local player = Players:GetPlayerByUserId(receiptInfo.PlayerId)
 	if not player then
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 
-	local productId = receiptInfo.ProductId
-	for prodName, data in pairs(MonetizationConfig.DevProducts) do
-		if data.Id == productId then
-			local success = fulfillPurchase(player, prodName)
-			return if success then Enum.ProductPurchaseDecision.PurchaseGranted else Enum.ProductPurchaseDecision.NotProcessedYet
+	local profile = PlayerDataManager.GetProfile(player)
+	if not profile then
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+
+	for itemKey, config in pairs(MonetizationConfig.DevProducts) do
+		if config.ProductId == receiptInfo.ProductId then
+			grantProductReward(player, itemKey, config)
+			PlayerDataManager.SyncClient(player)
+			NotifyClient:FireClient(player, "Purchased " .. config.Name .. "!", "Success", "📦")
+			return Enum.ProductPurchaseDecision.PurchaseGranted
 		end
 	end
 
-	return Enum.ProductPurchaseDecision.PurchaseGranted
+	return Enum.ProductPurchaseDecision.NotProcessedYet
 end
 
+-- ===================================================================
+-- 3. PRODUCTION GAMEPASS PURCHASE FINISHED LISTENER
+-- ===================================================================
 MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player: Player, passId: number, wasPurchased: boolean)
-	if wasPurchased then
-		for passKey, data in pairs(MonetizationConfig.GamePasses) do
-			if data.Id == passId then
-				fulfillPurchase(player, passKey)
-				break
-			end
-		end
-	end
-end)
+	if not wasPurchased then return end
 
-local TestBuyProduct = Remotes:WaitForChild("TestBuyProduct") :: RemoteEvent
-TestBuyProduct.OnServerEvent:Connect(function(player: Player, itemKey: string)
-	if MonetizationConfig.TEST_MODE and typeof(itemKey) == "string" then
-		fulfillPurchase(player, itemKey)
+	local profile = PlayerDataManager.GetProfile(player)
+	if not profile then return end
+
+	for itemKey, config in pairs(MonetizationConfig.GamePasses) do
+		if config.AssetId == passId then
+			if not profile.Data.OwnedPasses then
+				profile.Data.OwnedPasses = {}
+			end
+			profile.Data.OwnedPasses[itemKey] = true
+			PlayerDataManager.SyncClient(player)
+			NotifyClient:FireClient(player, "Unlocked " .. config.Name .. "!", "Success", "👑")
+			print(string.format("[Monetization] Player %s purchased gamepass: %s", player.Name, itemKey))
+			break
+		end
 	end
 end)
 

@@ -18,6 +18,7 @@ end)
 
 local GearConfig = require(ReplicatedStorage.Config.GearConfig)
 local ZoneConfig = require(ReplicatedStorage.Config.ZoneConfig)
+local MonetizationConfig = require(ReplicatedStorage.Config.MonetizationConfig)
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -28,6 +29,7 @@ if not MainHUD then
 end
 
 MainHUD.ResetOnSpawn = false
+MainHUD.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local PlayerDataUpdate = Remotes:WaitForChild("PlayerDataUpdate") :: RemoteEvent
@@ -99,6 +101,17 @@ local slotDodge = actionBar and actionBar:FindFirstChild("Slot_Dodge") :: Frame?
 local sfxCollect = SoundService:WaitForChild("SFX_Collect", 3) :: Sound?
 local sfxSell = SoundService:WaitForChild("SFX_Sell", 3) :: Sound?
 
+local PEARL_ICON_ASSET = "rbxassetid://101610215510039"
+local STUD_TEXTURE = "rbxassetid://18878365966"
+
+local TIER_COLORS = {
+	[1] = Color3.fromRGB(95, 105, 120),  -- Tier 1: Slate
+	[2] = Color3.fromRGB(45, 155, 75),   -- Tier 2: Kelp Emerald
+	[3] = Color3.fromRGB(30, 130, 230),  -- Tier 3: Ocean Sapphire
+	[4] = Color3.fromRGB(150, 50, 215),  -- Tier 4: Abyssal Amethyst
+	[5] = Color3.fromRGB(245, 140, 20),  -- Tier 5: Radiant Gold
+}
+
 local currentData = {
 	Pearls = 0,
 	OxygenTankTier = 1,
@@ -115,12 +128,12 @@ local currentData = {
 -- 0. DYNAMIC SCROLLING CANVAS BINDINGS
 -- ===================================================================
 if storeList then
-	local uiList = storeList:FindFirstChildOfClass("UIListLayout")
-	if uiList then
+	local layout = storeList:FindFirstChildOfClass("UIListLayout") or storeList:FindFirstChildOfClass("UIGridLayout")
+	if layout then
 		local function updateStoreCanvas()
-			storeList.CanvasSize = UDim2.new(0, 0, 0, uiList.AbsoluteContentSize.Y + 28)
+			storeList.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 36)
 		end
-		uiList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateStoreCanvas)
+		layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateStoreCanvas)
 		task.defer(updateStoreCanvas)
 	end
 end
@@ -217,23 +230,85 @@ ShowRevivePrompt.OnClientEvent:Connect(function()
 end)
 
 -- ===================================================================
--- 2. STORE MODAL (BOUNCY ANIMATION & DYNAMIC SCROLL)
+-- 2. STORE MODAL (STARTER PACK & PASSES 1-TIME "PURCHASED" SYSTEM)
 -- ===================================================================
-local STORE_FULL_SIZE = UDim2.new(0, 520, 0, 430)
+local RESPONSIVE_STORE_SIZE = UDim2.new(0.9, 0, 0.85, 0)
 local MODAL_ZERO_SIZE = UDim2.new(0, 0, 0, 0)
+
+-- One-time purchases: 3 Game Passes + Starter Pack!
+local ONE_TIME_PURCHASES = { "DeepDiver", "TreasureHunter", "LeviathanPass", "StarterPack" }
 
 local function refreshStoreButtons()
 	if not storeList then return end
 
-	local gamePasses = { "DeepDiver", "TreasureHunter", "LeviathanPass" }
-	for _, passKey in ipairs(gamePasses) do
-		local row = storeList:FindFirstChild("Row_" .. passKey)
+	for _, itemKey in ipairs(ONE_TIME_PURCHASES) do
+		local row = storeList:FindFirstChild("Row_" .. itemKey, true) :: Frame?
 		local buyBtn = row and row:FindFirstChild("BuyButton") :: TextButton?
 		if buyBtn then
-			if currentData.OwnedPasses and currentData.OwnedPasses[passKey] == true then
-				buyBtn.Text = "OWNED"
-				buyBtn.BackgroundColor3 = Color3.fromRGB(75, 85, 95)
+			local priceContent = buyBtn:FindFirstChild("PriceContent")
+			local purchasedLabel = buyBtn:FindFirstChild("PurchasedLabel")
+			local grad = buyBtn:FindFirstChildOfClass("UIGradient")
+
+			buyBtn.Text = "" -- Ensure no legacy text
+
+			if currentData.OwnedPasses and currentData.OwnedPasses[itemKey] == true then
+				-- One-Time Item PURCHASED: Show visual label, hide Robux price
+				if priceContent then priceContent.Visible = false end
+				if purchasedLabel then purchasedLabel.Visible = true end
+				if grad then grad.Enabled = false end
+				buyBtn.BackgroundColor3 = Color3.fromRGB(65, 75, 85)
 				buyBtn.AutoButtonColor = false
+			else
+				-- Unpurchased: Pure white base lets neon lime UIGradient shine at 100% full brightness!
+				if priceContent then priceContent.Visible = true end
+				if purchasedLabel then purchasedLabel.Visible = false end
+				if grad then grad.Enabled = true end
+				buyBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				buyBtn.AutoButtonColor = true
+			end
+		end
+	end
+end
+
+local function applyStoreIcons()
+	if not storeList then return end
+	for _, desc in ipairs(storeList:GetDescendants()) do
+		if desc:IsA("Frame") and desc.Name:match("^Row_") then
+			local itemKey = desc.Name:gsub("^Row_", "")
+			local config = MonetizationConfig.DevProducts[itemKey] or MonetizationConfig.GamePasses[itemKey]
+			if config and config.Icon then
+				local iconBox = desc:FindFirstChild("IconBox")
+				if iconBox then
+					local iconImg = iconBox:FindFirstChild("IconImage") or iconBox:FindFirstChildOfClass("ImageLabel")
+					if iconImg then
+						iconImg.Image = config.Icon
+					end
+				end
+			end
+		end
+	end
+end
+
+local function hookStoreButtons()
+	if not storeList then return end
+	for _, desc in ipairs(storeList:GetDescendants()) do
+		if desc:IsA("Frame") and desc.Name:match("^Row_") then
+			local itemKey = desc.Name:gsub("^Row_", "")
+			local buyBtn = desc:FindFirstChild("BuyButton") :: TextButton?
+			if buyBtn then
+				for _, sub in ipairs(buyBtn:GetDescendants()) do
+					if sub:IsA("GuiObject") then
+						sub.Active = false
+					end
+				end
+
+				buyBtn.MouseButton1Click:Connect(function()
+					-- Block purchase if already owned!
+					if currentData.OwnedPasses and currentData.OwnedPasses[itemKey] == true then
+						return
+					end
+					TestBuyProduct:FireServer(itemKey)
+				end)
 			end
 		end
 	end
@@ -241,12 +316,13 @@ end
 
 local function openStore()
 	if not storeModal or storeModal.Visible then return end
+	applyStoreIcons()
 	refreshStoreButtons()
 	storeModal.Size = MODAL_ZERO_SIZE
 	storeModal.Visible = true
 
 	TweenService:Create(storeModal, TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-		Size = STORE_FULL_SIZE
+		Size = RESPONSIVE_STORE_SIZE
 	}):Play()
 end
 
@@ -262,23 +338,7 @@ end
 
 if storeButton then storeButton.MouseButton1Click:Connect(openStore) end
 if storeCloseBtn then storeCloseBtn.MouseButton1Click:Connect(closeStore) end
-
-if storeList then
-	for _, child in ipairs(storeList:GetChildren()) do
-		if child:IsA("Frame") and child.Name:match("^Row_") then
-			local itemKey = child.Name:gsub("^Row_", "")
-			local buyBtn = child:FindFirstChild("BuyButton") :: TextButton?
-			if buyBtn then
-				buyBtn.MouseButton1Click:Connect(function()
-					if currentData.OwnedPasses and currentData.OwnedPasses[itemKey] == true then
-						return
-					end
-					TestBuyProduct:FireServer(itemKey)
-				end)
-			end
-		end
-	end
-end
+task.defer(hookStoreButtons)
 
 -- ===================================================================
 -- 3. BOSS HEALTH BAR (ZONE 5 EXCLUSIVE)
@@ -320,7 +380,7 @@ BossHealthUpdate.OnClientEvent:Connect(function(curHP: number, maxHP: number, al
 end)
 
 -- ===================================================================
--- 4. GEAR SHOP (CLEAN NON-OVERLAPPING TEXT)
+-- 4. GEAR SHOP (TIER-COLORED STUDDED ICONS & STUDDED UPGRADE BUTTONS)
 -- ===================================================================
 local catalogMap = {
 	["OxygenTank"] = { Catalog = GearConfig.OxygenTanks, Title = "Oxygen Tank", StatKey = "MaxOxygen", StatSuffix = "s Air" },
@@ -345,36 +405,126 @@ local function refreshShopMenu()
 		local nameLabel = row:FindFirstChild("NameLabel") :: TextLabel?
 		local statLabel = row:FindFirstChild("StatLabel") :: TextLabel?
 		local upgradeBtn = row:FindFirstChild("UpgradeButton") :: TextButton?
+		local iconBox = row:FindFirstChild("IconBox")
 
-		-- Concise, non-overlapping label format
-		if nameLabel then
-			nameLabel.Text = string.format("Tier %d: %s", currentTier, currentTierConfig.Name)
+		if iconBox then
+			iconBox.BackgroundColor3 = TIER_COLORS[currentTier] or TIER_COLORS[1]
+
+			local studs = iconBox:FindFirstChild("StudsOverlay")
+			if studs and studs:IsA("ImageLabel") then
+				studs.TileSize = UDim2.new(0, 64, 0, 64)
+				studs.ImageTransparency = 0.58
+			end
+
+			local iconImg = iconBox:FindFirstChild("IconImage") or iconBox:FindFirstChildOfClass("ImageLabel")
+			if iconImg and currentTierConfig and currentTierConfig.Icon then
+				iconImg.Image = currentTierConfig.Icon
+			end
 		end
 
-		if currentTier >= #catalog then
-			if statLabel then statLabel.Text = "MAX LEVEL REACHED" end
-			if upgradeBtn then
+		if nameLabel then
+			nameLabel.Text = string.format("%s (Tier %d)", currentTierConfig.Name, currentTier)
+		end
+
+		if upgradeBtn then
+			upgradeBtn.ClipsDescendants = true
+
+			local btnStuds = upgradeBtn:FindFirstChild("BtnStuds") or upgradeBtn:FindFirstChild("StudsOverlay")
+			if not btnStuds then
+				btnStuds = Instance.new("ImageLabel")
+				btnStuds.Name = "BtnStuds"
+				btnStuds.BackgroundTransparency = 1
+				btnStuds.Size = UDim2.new(1, 0, 1, 0)
+				btnStuds.Image = STUD_TEXTURE
+				btnStuds.ScaleType = Enum.ScaleType.Tile
+				btnStuds.TileSize = UDim2.new(0, 36, 0, 36)
+				btnStuds.ImageColor3 = Color3.fromRGB(255, 255, 255)
+				btnStuds.ImageTransparency = 0.62
+				btnStuds.ZIndex = 9
+				btnStuds.Parent = upgradeBtn
+			end
+
+			local priceContainer = upgradeBtn:FindFirstChild("PriceContainer")
+			local costLabel = priceContainer and priceContainer:FindFirstChild("CostLabel") :: TextLabel?
+			local pearlIcon = priceContainer and priceContainer:FindFirstChild("PearlIcon") :: ImageLabel?
+
+			if not priceContainer then
+				priceContainer = Instance.new("Frame")
+				priceContainer.Name = "PriceContainer"
+				priceContainer.Size = UDim2.new(1, 0, 1, 0)
+				priceContainer.BackgroundTransparency = 1
+				priceContainer.ZIndex = 11
+				priceContainer.Parent = upgradeBtn
+
+				local layout = Instance.new("UIListLayout")
+				layout.FillDirection = Enum.FillDirection.Horizontal
+				layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+				layout.VerticalAlignment = Enum.VerticalAlignment.Center
+				layout.Padding = UDim.new(0, 6)
+				layout.Parent = priceContainer
+
+				costLabel = Instance.new("TextLabel")
+				costLabel.Name = "CostLabel"
+				costLabel.BackgroundTransparency = 1
+				costLabel.AutomaticSize = Enum.AutomaticSize.XY
+				costLabel.Font = upgradeBtn.Font
+				costLabel.TextSize = 20
+				costLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+				costLabel.ZIndex = 12
+				costLabel.Parent = priceContainer
+
+				local stroke = Instance.new("UIStroke")
+				stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+				stroke.Thickness = 1.8
+				stroke.Color = Color3.fromRGB(15, 10, 5)
+				stroke.Parent = costLabel
+
+				pearlIcon = Instance.new("ImageLabel")
+				pearlIcon.Name = "PearlIcon"
+				pearlIcon.Size = UDim2.new(0, 22, 0, 22)
+				pearlIcon.BackgroundTransparency = 1
+				pearlIcon.Image = PEARL_ICON_ASSET
+				pearlIcon.ScaleType = Enum.ScaleType.Fit
+				pearlIcon.ZIndex = 12
+				pearlIcon.Parent = priceContainer
+			end
+
+			if priceContainer then
+				for _, sub in ipairs(priceContainer:GetDescendants()) do
+					if sub:IsA("GuiObject") then sub.Active = false end
+				end
+			end
+
+			if currentTier >= #catalog then
+				if priceContainer then priceContainer.Visible = false end
 				upgradeBtn.Text = "MAX"
-				upgradeBtn.BackgroundColor3 = Color3.fromRGB(75, 85, 95)
+				upgradeBtn.BackgroundColor3 = Color3.fromRGB(65, 75, 85)
 				upgradeBtn.AutoButtonColor = false
-			end
-		else
-			local nextTier = currentTier + 1
-			local nextConfig = catalog[nextTier]
 
-			if statLabel then
-				statLabel.Text = string.format("%s%s  ➔  %s%s", 
-					tostring(currentTierConfig[meta.StatKey]), meta.StatSuffix,
-					tostring(nextConfig[meta.StatKey]), meta.StatSuffix
-				)
-			end
+				if statLabel then statLabel.Text = "MAX LEVEL REACHED" end
+			else
+				local nextTier = currentTier + 1
+				local nextConfig = catalog[nextTier]
 
-			if upgradeBtn then
-				upgradeBtn.Text = string.format("%d ⚪", nextConfig.Cost)
+				if statLabel then
+					statLabel.Text = string.format("%s%s  ➔  %s%s", 
+						tostring(currentTierConfig[meta.StatKey]), meta.StatSuffix,
+						tostring(nextConfig[meta.StatKey]), meta.StatSuffix
+					)
+				end
+
+				if priceContainer and costLabel then
+					priceContainer.Visible = true
+					upgradeBtn.Text = ""
+					costLabel.Text = tostring(nextConfig.Cost)
+				else
+					upgradeBtn.Text = tostring(nextConfig.Cost)
+				end
+
 				upgradeBtn.AutoButtonColor = true
 
 				if currentData.Pearls >= nextConfig.Cost then
-					upgradeBtn.BackgroundColor3 = Color3.fromRGB(48, 185, 95)
+					upgradeBtn.BackgroundColor3 = Color3.fromRGB(250, 190, 35)
 				else
 					upgradeBtn.BackgroundColor3 = Color3.fromRGB(180, 80, 75)
 				end
@@ -384,7 +534,7 @@ local function refreshShopMenu()
 end
 
 local isShopAnimating = false
-local MODAL_FULL_SIZE = UDim2.new(0, 520, 0, 420)
+local RESPONSIVE_SHOP_SIZE = UDim2.new(0.9, 0, 0.82, 0)
 
 local function openShop()
 	if not shopModal or isShopAnimating or shopModal.Visible then return end
@@ -394,7 +544,7 @@ local function openShop()
 	shopModal.Visible = true
 
 	local tweenIn = TweenService:Create(shopModal, TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-		Size = MODAL_FULL_SIZE
+		Size = RESPONSIVE_SHOP_SIZE
 	})
 	tweenIn:Play()
 	tweenIn.Completed:Wait()
@@ -444,7 +594,7 @@ task.defer(hookShopPrompt)
 -- ===================================================================
 -- 5. PRESTIGE MODAL
 -- ===================================================================
-local PRESTIGE_FULL_SIZE = UDim2.new(0, 480, 0, 360)
+local RESPONSIVE_PRESTIGE_SIZE = UDim2.new(0.9, 0, 0.75, 0)
 
 local function updatePrestigeButtonState()
 	if not prestigeActionBtn then return end
@@ -452,7 +602,7 @@ local function updatePrestigeButtonState()
 	local currentRank = currentData.PrestigeLevel or 0
 	if currentRank >= 10 then
 		prestigeActionBtn.Text = "MAX PRESTIGE REACHED (RANK X)"
-		prestigeActionBtn.BackgroundColor3 = Color3.fromRGB(75, 85, 95)
+		prestigeActionBtn.BackgroundColor3 = Color3.fromRGB(65, 75, 85)
 		prestigeActionBtn.AutoButtonColor = false
 		return
 	end
@@ -473,7 +623,7 @@ local function updatePrestigeButtonState()
 		prestigeActionBtn.AutoButtonColor = false
 	else
 		prestigeActionBtn.Text = "PRESTIGE TO NEXT RANK (50,000 ⚪)"
-		prestigeActionBtn.BackgroundColor3 = Color3.fromRGB(240, 180, 45)
+		prestigeActionBtn.BackgroundColor3 = Color3.fromRGB(250, 190, 35)
 		prestigeActionBtn.AutoButtonColor = true
 	end
 end
@@ -485,7 +635,7 @@ local function openPrestigeModal()
 	prestigeModal.Visible = true
 
 	TweenService:Create(prestigeModal, TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-		Size = PRESTIGE_FULL_SIZE
+		Size = RESPONSIVE_PRESTIGE_SIZE
 	}):Play()
 end
 
@@ -657,7 +807,7 @@ PlayerDataUpdate.OnClientEvent:Connect(function(data)
 	if slotAbility and data.DivingSuitTier then
 		local suitConfig = GearConfig.DivingSuits[data.DivingSuitTier] or GearConfig.DivingSuits[1]
 		local actionLabel = slotAbility:FindFirstChild("ActionLabel") :: TextLabel?
-		if actionLabel then actionLabel.Text = suitConfig.Perk:upper() end
+		if actionLabel then actionLabel.Text = (suitConfig.Perk or "NONE"):upper() end
 	end
 
 	if data.BagCount ~= nil and data.BagCapacity ~= nil and bagText then

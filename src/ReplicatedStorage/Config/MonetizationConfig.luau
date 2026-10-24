@@ -1,66 +1,76 @@
 --!strict
+-- MonetizationConfig.luau
+-- Configuration for Game Passes and Developer Products with custom asset icons.
+
 local MonetizationConfig = {}
 
--- When true, allows testing all game passes and dev products in Studio without spending Robux!
-MonetizationConfig.TEST_MODE = true
-
--- ===================================================================
--- 1. GAME PASSES (Permanent Account Upgrades)
--- ===================================================================
 MonetizationConfig.GamePasses = {
-	["DeepDiver"] = {
-		Id = 0, -- Replace with actual GamePassId when published to DeepTidesDev
-		Name = "Deep Diver",
-		Price = 199,
-		Description = "Permanently doubles your oxygen tank capacity across all tiers!",
+	DeepDiver = {
+		Name = "Deep Diver Pass",
+		Description = "Permanently doubles base oxygen capacity for all tanks.",
+		PriceRobux = 199,
+		AssetId = 0,
+		Icon = "rbxassetid://135488209555435",
+		Benefit = "DoubleOxygenCapacity",
 	},
-	["TreasureHunter"] = {
-		Id = 0,
+	TreasureHunter = {
 		Name = "Treasure Hunter",
-		Price = 499,
-		Description = "Permanent +25% Pearl sell value bonus and +1 extra loot bag slot!",
+		Description = "+25% Pearl sell value on all items & +1 bag slot bonus.",
+		PriceRobux = 499,
+		AssetId = 0,
+		Icon = "rbxassetid://130686548601688",
+		Benefit = "SellBonus25_BagPlus1",
 	},
-	["LeviathanPass"] = {
-		Id = 0,
+	LeviathanPass = {
 		Name = "Leviathan Pass",
-		Price = 999,
-		Description = "Instant Zone 5 access without suit prerequisites and immune to deep pressure!",
+		Description = "Instant access to Zone 5 & immunity to Zone 4-5 pressure.",
+		PriceRobux = 999,
+		AssetId = 0,
+		Icon = "rbxassetid://124246652775070",
+		Benefit = "Zone5Access_PressureImmunity",
 	},
 }
 
--- ===================================================================
--- 2. DEVELOPER PRODUCTS (Consumable Boosts)
--- ===================================================================
 MonetizationConfig.DevProducts = {
-	["StarterPack"] = {
-		Id = 1,
+	StarterPack = {
 		Name = "Starter Pack",
-		Price = 99,
-		Description = "500 Pearls + 1 Uncommon Drop + 1 Emergency Oxygen refill!",
+		Description = "500 Pearls + 1 Uncommon Loot drop + full oxygen refill.",
+		PriceRobux = 99,
+		ProductId = 0,
+		Icon = "rbxassetid://92255133626886",
+		RewardType = "StarterBundle",
 	},
-	["EmergencyOxygen"] = {
-		Id = 2,
+	EmergencyOxygen = {
 		Name = "Emergency Oxygen",
-		Price = 49,
-		Description = "Instantly refills your oxygen tank back to 100% mid-dive!",
+		Description = "Instantly refills oxygen to 100% mid-dive. Auto-prompt at 10% O2.",
+		PriceRobux = 49,
+		ProductId = 0,
+		Icon = "rbxassetid://123870470701758",
+		RewardType = "InstantO2Refill",
 	},
-	["ReviveToken"] = {
-		Id = 3,
+	ReviveToken = {
 		Name = "Revive Token",
-		Price = 99,
-		Description = "Recovers a lost loot bag dropped during a PvP defeat (30s window)!",
+		Description = "Recovers dropped loot bag from PvP death. Usable within 30s.",
+		PriceRobux = 99,
+		ProductId = 0,
+		Icon = "rbxassetid://125701373219141",
+		RewardType = "RecoverPvPLoot",
 	},
-	["LootMagnet"] = {
-		Id = 4,
+	LootMagnet = {
 		Name = "Loot Magnet",
-		Price = 49,
-		Description = "Doubles loot collection pickup reach for the entire dive!",
+		Description = "2x pickup reach for entire dive. Lasts until you surface.",
+		PriceRobux = 49,
+		ProductId = 0,
+		Icon = "rbxassetid://88385204872531",
+		RewardType = "LootMagnetBuff",
 	},
-	["RareDive"] = {
-		Id = 5,
+	RareDive = {
 		Name = "Rare Dive",
-		Price = 149,
-		Description = "Guarantees a Rare or better drop on your next loot collection!",
+		Description = "Guarantees a Rare+ drop on next dive. 1-time consumable.",
+		PriceRobux = 149,
+		ProductId = 0,
+		Icon = "rbxassetid://135867361229728",
+		RewardType = "GuaranteedRareDrop",
 	},
 }
 
