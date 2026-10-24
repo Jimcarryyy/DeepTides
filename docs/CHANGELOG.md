@@ -100,4 +100,14 @@ All notable changes to the Deep Tides project are documented in this file.
 - **Showcase Player Freezing Bug:** Eliminated player character lockup on weapon display by removing `Tool` classes from the exhibition and using visual `Model`s only with `CanTouch = false`.
 - **Lighting & Glare Audit:** Reduced blinding glare by lowering `Lighting.Brightness = 1.8`, setting `ExposureCompensation = -0.2`, raising `Bloom.Threshold = 1.25`, and globally clamping all workspace `PointLight`s to 0.7 max brightness.
 
+## [0.5.0] - 2026-10-25
+### Added
+- Phase 2 Milestone B UI/UX Overhaul implementation.
+- *Steal an Egg* / *Grow a Garden* modular visual standard across all screens (`GearShopModal`, `PrestigeModal`, `StoreModal`, and prompts).
+- Chunky 68px/76px circular studs on outer frames and headers, with zero `UICorner` (crisp 90° arcade block layout).
+- Dual outlines (Outer black comic stroke + inner silver-gray bevel highlight) across all major modals, cards, icon boxes, and buttons.
+- Parallel chameleon glass reflection rays behind card content, featuring center-convergence hover effects.
+- Integration of 36 custom asset IDs across HUD currency pills, tier-1 to 5 gear icons, and store gamepasses/dev products.
+- 1-time purchase locking and visual `PURCHASED` badges for the 3 Game Passes and the Starter Pack.
+
 ---
