@@ -2,6 +2,7 @@
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
@@ -87,6 +88,45 @@ local function spawnLeviathanVault(seafloorPos: Vector3)
 	end)
 end
 
+-- NATURAL CREATURE DEATH SEQUENCE (Belly-up roll, gentle sink/float & 2.2s fade)
+local function playCreatureDeathSequence(model: Model)
+	local prim = model.PrimaryPart
+	if not prim then
+		model:Destroy()
+		return
+	end
+
+	-- Disable collisions so players don't bump into dying corpse
+	for _, p in ipairs(model:GetDescendants()) do
+		if p:IsA("BasePart") then
+			p.CanCollide = false
+			p.CanTouch = false
+		end
+	end
+
+	-- Slow, gentle upside-down roll (classic dead fish belly-up) and drift
+	local deathCF = prim.CFrame * CFrame.Angles(math.rad(160), 0, math.rad(25)) + Vector3.new(0, -3.0, 0)
+	TweenService:Create(prim, TweenInfo.new(2.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+		CFrame = deathCF,
+	}):Play()
+
+	-- Smooth fade out of all parts and meshes
+	for _, p in ipairs(model:GetDescendants()) do
+		if p:IsA("BasePart") then
+			TweenService:Create(p, TweenInfo.new(2.0, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+				Transparency = 1,
+			}):Play()
+		end
+	end
+
+	-- Clean up after fade finishes
+	task.delay(2.3, function()
+		if model and model.Parent then
+			model:Destroy()
+		end
+	end)
+end
+
 local function applyCreatureDamage(player: Player, baseDamage: number, creatureName: string, icon: string)
 	local char = player.Character
 	if not char then return end
@@ -132,7 +172,7 @@ local function getClosestSubmergedPlayer(origin: Vector3, maxRadius: number): (P
 end
 
 -- ===================================================================
--- CREATURE SPAWNERS (CLONED FROM REPLICATEDSTORAGE.CREATUREMODELS)
+-- CREATURE SPAWNERS
 -- ===================================================================
 local function spawnJellyfish(pos: Vector3, angleOffset: number)
 	creatureCounter += 1
@@ -206,7 +246,6 @@ local function spawnGiantOctopus(pos: Vector3)
 	}
 end
 
--- SPAWN THE LEVIATHAN (ZONE 5 WORLD BOSS: 1500 HP)
 local function spawnTheLeviathan(pos: Vector3)
 	creatureCounter += 1
 	local id = creatureCounter
@@ -260,11 +299,11 @@ end
 task.defer(initAllCreatures)
 
 -- ===================================================================
--- COMBAT SYSTEM (ATTACKING CREATURES & THE LEVIATHAN)
+-- COMBAT SYSTEM (TRUE LINE-OF-SIGHT HIT DETECTION)
 -- ===================================================================
 local playerAttackCooldowns: { [Player]: number } = {}
 
-AttackRequest.OnServerEvent:Connect(function(player: Player)
+AttackRequest.OnServerEvent:Connect(function(player: Player, clientAimDir: any)
 	local char = player.Character
 	if not char then return end
 	local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
@@ -276,21 +315,41 @@ AttackRequest.OnServerEvent:Connect(function(player: Player)
 
 	local now = os.clock()
 	local lastAttack = playerAttackCooldowns[player] or 0
-	if now - lastAttack < toolConfig.Cooldown then return end
+	if now - lastAttack < (toolConfig.Cooldown - 0.05) then return end
 	playerAttackCooldowns[player] = now
 
-	local ATTACK_RANGE = 16.0
+	local isRangedHarpoon = (toolTier == 3)
+	local maxRange = if isRangedHarpoon then 65.0 else 16.0
+
+	local aimDirection: Vector3 = if typeof(clientAimDir) == "Vector3" and clientAimDir.Magnitude > 0.1
+		then clientAimDir.Unit
+		else hrp.CFrame.LookVector
+
 	local closestCreature: CreatureInstance? = nil
-	local closestDist = ATTACK_RANGE
+	local closestDist = maxRange
 
 	for _, creature in pairs(activeCreatures) do
 		if creature.State ~= "Dead" and creature.Model.Parent then
 			local prim = creature.Model.PrimaryPart
 			if prim then
-				local dist = (prim.Position - hrp.Position).Magnitude
-				if dist <= closestDist then
-					closestDist = dist
-					closestCreature = creature
+				local toCreature = prim.Position - hrp.Position
+				local forwardDist = toCreature:Dot(aimDirection)
+
+				if forwardDist > 1.5 and forwardDist <= maxRange then
+					if isRangedHarpoon then
+						local perpDist = (toCreature - (aimDirection * forwardDist)).Magnitude
+						local bodyRadius = math.max(creature.HitRadius * 0.75, 2.8)
+
+						if perpDist <= bodyRadius and forwardDist < closestDist then
+							closestDist = forwardDist
+							closestCreature = creature
+						end
+					else
+						if toCreature.Magnitude <= maxRange and toCreature.Magnitude < closestDist then
+							closestDist = toCreature.Magnitude
+							closestCreature = creature
+						end
+					end
 				end
 			end
 		end
@@ -298,8 +357,8 @@ AttackRequest.OnServerEvent:Connect(function(player: Player)
 
 	if closestCreature then
 		closestCreature.Health -= toolConfig.Damage
-		print(string.format("[Combat] %s hit %s for %d damage! (HP: %d/%d)", 
-			player.Name, closestCreature.Type, toolConfig.Damage, math.max(0, closestCreature.Health), closestCreature.MaxHealth
+		print(string.format("[Combat] %s hit %s for %d damage! (HP: %d/%d) from %.1f studs", 
+			player.Name, closestCreature.Type, toolConfig.Damage, math.max(0, closestCreature.Health), closestCreature.MaxHealth, closestDist
 		))
 
 		if closestCreature.Type == "TheLeviathan" then
@@ -315,12 +374,14 @@ AttackRequest.OnServerEvent:Connect(function(player: Player)
 			end)
 		end
 
+		-- CREATURE DEFEAT
 		if closestCreature.Health <= 0 then
 			closestCreature.State = "Dead"
 			local reward = closestCreature.PearlReward
 			local creatureName = closestCreature.Type
 			local cType = closestCreature.Type
 			local bPos = closestCreature.BasePos
+			local deadModel = closestCreature.Model
 
 			PlayerDataManager.AddPearls(player, reward)
 			NotifyClient:FireClient(player, string.format("Defeated %s! (+%d Pearls)", creatureName, reward), "Success", "⚔️")
@@ -331,7 +392,8 @@ AttackRequest.OnServerEvent:Connect(function(player: Player)
 				NotifyClient:FireClient(player, "THE LEVIATHAN HAS FALLEN! Treasure Vault opened on the seabed!", "Success", "👑")
 			end
 
-			closestCreature.Model:Destroy()
+			-- Play belly-up rolling and sinking fade-out (No instant disappearance!)
+			playCreatureDeathSequence(deadModel)
 
 			task.delay(20, function()
 				if cType == "Jellyfish" then
@@ -350,7 +412,9 @@ AttackRequest.OnServerEvent:Connect(function(player: Player)
 	end
 end)
 
--- AI Loop
+-- ===================================================================
+-- AI RUNTIME LOOP
+-- ===================================================================
 local clock = 0
 RunService.Heartbeat:Connect(function(dt: number)
 	clock += dt
@@ -377,7 +441,7 @@ RunService.Heartbeat:Connect(function(dt: number)
 				applyCreatureDamage(player, creature.Damage, "Jellyfish", "⚡")
 			end
 
-		-- 2. ELECTRIC EEL (STUNS 1.2S, RESTORES FULL GEAR SPEED)
+		-- 2. ELECTRIC EEL
 		elseif creature.Type == "ElectricEel" then
 			local player, hrp, dist = getClosestSubmergedPlayer(primary.Position, creature.AggroRadius)
 
@@ -433,7 +497,7 @@ RunService.Heartbeat:Connect(function(dt: number)
 				model:PivotTo(CFrame.lookAt(targetPos, lookTarget))
 			end
 
-		-- 4. GIANT OCTOPUS (SLOWS 50% OF GEAR SPEED, RESTORES FULL GEAR SPEED)
+		-- 4. GIANT OCTOPUS
 		elseif creature.Type == "GiantOctopus" then
 			local player, hrp, dist = getClosestSubmergedPlayer(primary.Position, creature.AggroRadius)
 
@@ -469,7 +533,7 @@ RunService.Heartbeat:Connect(function(dt: number)
 				model:PivotTo(CFrame.lookAt(targetPos, lookTarget))
 			end
 
-		-- 5. THE LEVIATHAN (ZONE 5 WORLD RAID BOSS)
+		-- 5. THE LEVIATHAN
 		elseif creature.Type == "TheLeviathan" then
 			local player, hrp, dist = getClosestSubmergedPlayer(primary.Position, creature.AggroRadius)
 
