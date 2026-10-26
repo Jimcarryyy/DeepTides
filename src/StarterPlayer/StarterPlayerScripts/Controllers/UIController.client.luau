@@ -100,16 +100,17 @@ local slotDodge = actionBar and actionBar:FindFirstChild("Slot_Dodge") :: Frame?
 
 local sfxCollect = SoundService:WaitForChild("SFX_Collect", 3) :: Sound?
 local sfxSell = SoundService:WaitForChild("SFX_Sell", 3) :: Sound?
+local sfxZoneSwitcher = SoundService:WaitForChild("ZoneSwitcher", 5) :: Sound?
 
 local PEARL_ICON_ASSET = "rbxassetid://101610215510039"
 local STUD_TEXTURE = "rbxassetid://18878365966"
 
 local TIER_COLORS = {
-	[1] = Color3.fromRGB(95, 105, 120),  -- Tier 1: Slate
-	[2] = Color3.fromRGB(45, 155, 75),   -- Tier 2: Kelp Emerald
-	[3] = Color3.fromRGB(30, 130, 230),  -- Tier 3: Ocean Sapphire
-	[4] = Color3.fromRGB(150, 50, 215),  -- Tier 4: Abyssal Amethyst
-	[5] = Color3.fromRGB(245, 140, 20),  -- Tier 5: Radiant Gold
+	[1] = Color3.fromRGB(95, 105, 120),
+	[2] = Color3.fromRGB(45, 155, 75),
+	[3] = Color3.fromRGB(30, 130, 230),
+	[4] = Color3.fromRGB(150, 50, 215),
+	[5] = Color3.fromRGB(245, 140, 20),
 }
 
 local currentData = {
@@ -230,12 +231,11 @@ ShowRevivePrompt.OnClientEvent:Connect(function()
 end)
 
 -- ===================================================================
--- 2. STORE MODAL (STARTER PACK & PASSES 1-TIME "PURCHASED" SYSTEM)
+-- 2. STORE MODAL
 -- ===================================================================
 local RESPONSIVE_STORE_SIZE = UDim2.new(0.9, 0, 0.85, 0)
 local MODAL_ZERO_SIZE = UDim2.new(0, 0, 0, 0)
 
--- One-time purchases: 3 Game Passes + Starter Pack!
 local ONE_TIME_PURCHASES = { "DeepDiver", "TreasureHunter", "LeviathanPass", "StarterPack" }
 
 local function refreshStoreButtons()
@@ -249,17 +249,15 @@ local function refreshStoreButtons()
 			local purchasedLabel = buyBtn:FindFirstChild("PurchasedLabel")
 			local grad = buyBtn:FindFirstChildOfClass("UIGradient")
 
-			buyBtn.Text = "" -- Ensure no legacy text
+			buyBtn.Text = ""
 
 			if currentData.OwnedPasses and currentData.OwnedPasses[itemKey] == true then
-				-- One-Time Item PURCHASED: Show visual label, hide Robux price
 				if priceContent then priceContent.Visible = false end
 				if purchasedLabel then purchasedLabel.Visible = true end
 				if grad then grad.Enabled = false end
 				buyBtn.BackgroundColor3 = Color3.fromRGB(65, 75, 85)
 				buyBtn.AutoButtonColor = false
 			else
-				-- Unpurchased: Pure white base lets neon lime UIGradient shine at 100% full brightness!
 				if priceContent then priceContent.Visible = true end
 				if purchasedLabel then purchasedLabel.Visible = false end
 				if grad then grad.Enabled = true end
@@ -303,7 +301,6 @@ local function hookStoreButtons()
 				end
 
 				buyBtn.MouseButton1Click:Connect(function()
-					-- Block purchase if already owned!
 					if currentData.OwnedPasses and currentData.OwnedPasses[itemKey] == true then
 						return
 					end
@@ -380,7 +377,7 @@ BossHealthUpdate.OnClientEvent:Connect(function(curHP: number, maxHP: number, al
 end)
 
 -- ===================================================================
--- 4. GEAR SHOP (TIER-COLORED STUDDED ICONS & STUDDED UPGRADE BUTTONS)
+-- 4. GEAR SHOP
 -- ===================================================================
 local catalogMap = {
 	["OxygenTank"] = { Catalog = GearConfig.OxygenTanks, Title = "Oxygen Tank", StatKey = "MaxOxygen", StatSuffix = "s Air" },
@@ -671,10 +668,10 @@ end
 task.defer(hookPrestigeShrinePrompt)
 
 -- ===================================================================
--- 6. RESPONSIVE NOTIFICATION TOAST
+-- 6. RESPONSIVE NOTIFICATION TOAST & CLEAN SILENCED KILL NOTIFS
 -- ===================================================================
 local currentToastId = 0
-local function showNotification(message: string, style: string?, icon: string?)
+local function showNotification(message: string, style: string?, icon: string?, isZoneEntry: boolean?)
 	if not toast or not toastMessage then return end
 
 	currentToastId += 1
@@ -683,14 +680,26 @@ local function showNotification(message: string, style: string?, icon: string?)
 	toastMessage.Text = message
 	if toastIcon then toastIcon.Text = icon or "✨" end
 
+	-- Check if this is a creature kill notification
+	local isKillNotification = (icon == "⚔️") or (string.find(message, "Defeated ") ~= nil)
+
 	if style == "Success" then
 		if toastStroke then toastStroke.Color = Color3.fromRGB(50, 215, 120) end
-		if sfxSell then sfxSell:Play() end
+		-- SILENCE: Never play cash register sound when killing a creature
+		if sfxSell and not isKillNotification then
+			sfxSell:Play()
+		end
 	elseif style == "Warning" then
 		if toastStroke then toastStroke.Color = Color3.fromRGB(255, 130, 60) end
 	else
 		if toastStroke then toastStroke.Color = Color3.fromRGB(70, 195, 255) end
-		if sfxCollect then sfxCollect:Play() end
+		if isZoneEntry then
+			if sfxZoneSwitcher then sfxZoneSwitcher:Play() end
+		else
+			if sfxCollect and not isKillNotification then
+				sfxCollect:Play()
+			end
+		end
 	end
 
 	toast.Visible = true
@@ -714,9 +723,11 @@ local function showNotification(message: string, style: string?, icon: string?)
 	end
 end
 
-NotifyClient.OnClientEvent:Connect(showNotification)
+NotifyClient.OnClientEvent:Connect(function(msg, style, icon)
+	showNotification(msg, style, icon, false)
+end)
 
--- Depth Zone Entry Tracker & Real-Time Boss Bar State
+-- Depth Zone Entry Tracker with ZoneSwitcher audio
 local lastZoneId = 1
 task.spawn(function()
 	while true do
@@ -729,7 +740,7 @@ task.spawn(function()
 				if zone and zone.Id ~= lastZoneId then
 					lastZoneId = zone.Id
 					local dangerEmoji = if zone.Id == 1 then "🌊" elseif zone.Id == 2 then "🌿" elseif zone.Id == 3 then "☠️" elseif zone.Id == 4 then "🐙" else "👑"
-					showNotification(string.format("Entering Zone %d: %s (%s Danger)", zone.Id, zone.Name, zone.Danger), "Info", dangerEmoji)
+					showNotification(string.format("Entering Zone %d: %s (%s Danger)", zone.Id, zone.Name, zone.Danger), "Info", dangerEmoji, true)
 				end
 			else
 				lastZoneId = 1
@@ -741,7 +752,6 @@ task.spawn(function()
 	end
 end)
 
--- Live Weapon Equip / Unequip Visual Tracker
 local function updateEquippedVisual()
 	local char = LocalPlayer.Character
 	if not char or not slotAttackTitle or not slotAttackStroke then return end
@@ -863,4 +873,4 @@ OxygenUpdate.OnClientEvent:Connect(function(cur: number, max: number, isSubmerge
 	end
 end)
 
-print("[Deep Tides] UIController: Concise shop labels & anti-dupe revive listeners active.")
+print("[Deep Tides] UIController: Kill notification SFX silenced. ZoneSwitcher preserved.")

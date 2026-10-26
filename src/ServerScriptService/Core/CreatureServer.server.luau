@@ -3,6 +3,7 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local SoundService = game:GetService("SoundService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
@@ -22,6 +23,10 @@ if not ActiveCreaturesFolder then
 	ActiveCreaturesFolder.Name = "ActiveCreatures"
 	ActiveCreaturesFolder.Parent = Workspace
 end
+
+-- SFX Folders
+local defeatSfxFolder = SoundService:WaitForChild("CreatureDefeatSFX", 10) :: Folder?
+local damageSfxFolder = SoundService:WaitForChild("DamageSFX", 10) :: Folder?
 
 type CreatureInstance = {
 	Id: number,
@@ -46,7 +51,6 @@ local activeCreatures: { [number]: CreatureInstance } = {}
 local creatureCounter = 0
 local leviathanBoss: CreatureInstance? = nil
 
--- Spawns the massive golden Leviathan Treasure Vault upon boss defeat
 local function spawnLeviathanVault(seafloorPos: Vector3)
 	local vault = Instance.new("Part")
 	vault.Name = "LeviathanTreasureVault"
@@ -88,7 +92,6 @@ local function spawnLeviathanVault(seafloorPos: Vector3)
 	end)
 end
 
--- NATURAL CREATURE DEATH SEQUENCE (Belly-up roll, gentle sink/float & 2.2s fade)
 local function playCreatureDeathSequence(model: Model)
 	local prim = model.PrimaryPart
 	if not prim then
@@ -96,7 +99,6 @@ local function playCreatureDeathSequence(model: Model)
 		return
 	end
 
-	-- Disable collisions so players don't bump into dying corpse
 	for _, p in ipairs(model:GetDescendants()) do
 		if p:IsA("BasePart") then
 			p.CanCollide = false
@@ -104,13 +106,11 @@ local function playCreatureDeathSequence(model: Model)
 		end
 	end
 
-	-- Slow, gentle upside-down roll (classic dead fish belly-up) and drift
 	local deathCF = prim.CFrame * CFrame.Angles(math.rad(160), 0, math.rad(25)) + Vector3.new(0, -3.0, 0)
 	TweenService:Create(prim, TweenInfo.new(2.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
 		CFrame = deathCF,
 	}):Play()
 
-	-- Smooth fade out of all parts and meshes
 	for _, p in ipairs(model:GetDescendants()) do
 		if p:IsA("BasePart") then
 			TweenService:Create(p, TweenInfo.new(2.0, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
@@ -119,7 +119,6 @@ local function playCreatureDeathSequence(model: Model)
 		end
 	end
 
-	-- Clean up after fade finishes
 	task.delay(2.3, function()
 		if model and model.Parent then
 			model:Destroy()
@@ -131,6 +130,7 @@ local function applyCreatureDamage(player: Player, baseDamage: number, creatureN
 	local char = player.Character
 	if not char then return end
 	local hum = char:FindFirstChildOfClass("Humanoid")
+	local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
 	if not hum or hum.Health <= 0 then return end
 
 	local finalDamage = baseDamage
@@ -141,6 +141,18 @@ local function applyCreatureDamage(player: Player, baseDamage: number, creatureN
 		NotifyClient:FireClient(player, string.format("Shield Absorbed Hit! Took %d dmg from %s", finalDamage, creatureName), "Success", "🛡️")
 	else
 		NotifyClient:FireClient(player, string.format("Hit by %s! (-%d HP)", creatureName, finalDamage), "Warning", icon)
+	end
+
+	-- Play CreatureAttackImpact SFX at player's position
+	if damageSfxFolder and hrp then
+		local impactSound = damageSfxFolder:FindFirstChild("CreatureAttackImpact") :: Sound?
+		if impactSound then
+			local sfx = impactSound:Clone()
+			sfx.Parent = hrp
+			sfx.PlaybackSpeed = math.random(95, 105) / 100
+			sfx:Play()
+			task.delay(1.5, function() sfx:Destroy() end)
+		end
 	end
 
 	hum:TakeDamage(finalDamage)
@@ -274,23 +286,16 @@ local function initAllCreatures()
 	ActiveCreaturesFolder:ClearAllChildren()
 	activeCreatures = {}
 
-	-- Zone 1: 4 Jellyfish
 	spawnJellyfish(Vector3.new(12, -28, 12), 0)
 	spawnJellyfish(Vector3.new(-14, -36, 10), 1.5)
 	spawnJellyfish(Vector3.new(10, -42, -15), 3.0)
 	spawnJellyfish(Vector3.new(-12, -48, -12), 4.5)
 
-	-- Zone 2: 2 Electric Eels
 	spawnElectricEel(Vector3.new(0, -92, 0), 0)
 	spawnElectricEel(Vector3.new(0, -120, 0), math.pi)
 
-	-- Zone 3: 1 Hammerhead Shark (Y = -215)
 	spawnHammerheadShark(Vector3.new(0, -215, 0))
-
-	-- Zone 4: 1 Giant Octopus (Y = -320)
 	spawnGiantOctopus(Vector3.new(0, -320, 0))
-
-	-- Zone 5: 1 The Leviathan (Y = -540)
 	spawnTheLeviathan(Vector3.new(0, -540, 0))
 
 	print("[Creatures] Full Creature ecosystem + The Leviathan active across all 5 zones!")
@@ -299,7 +304,7 @@ end
 task.defer(initAllCreatures)
 
 -- ===================================================================
--- COMBAT SYSTEM (TRUE LINE-OF-SIGHT HIT DETECTION)
+-- COMBAT SYSTEM (TRUE LINE-OF-SIGHT HIT DETECTION & DEFEAT SFX)
 -- ===================================================================
 local playerAttackCooldowns: { [Player]: number } = {}
 
@@ -382,6 +387,19 @@ AttackRequest.OnServerEvent:Connect(function(player: Player, clientAimDir: any)
 			local cType = closestCreature.Type
 			local bPos = closestCreature.BasePos
 			local deadModel = closestCreature.Model
+			local deadPrim = deadModel.PrimaryPart
+
+			-- Play Unique Creature Defeat Sound (3D Spatial Audio)
+			if defeatSfxFolder and deadPrim then
+				local defeatSound = defeatSfxFolder:FindFirstChild(cType) :: Sound?
+				if defeatSound then
+					local sfx = defeatSound:Clone()
+					sfx.Parent = deadPrim
+					sfx.PlaybackSpeed = math.random(95, 105) / 100
+					sfx:Play()
+					task.delay(4.0, function() sfx:Destroy() end)
+				end
+			end
 
 			PlayerDataManager.AddPearls(player, reward)
 			NotifyClient:FireClient(player, string.format("Defeated %s! (+%d Pearls)", creatureName, reward), "Success", "⚔️")
@@ -392,7 +410,6 @@ AttackRequest.OnServerEvent:Connect(function(player: Player, clientAimDir: any)
 				NotifyClient:FireClient(player, "THE LEVIATHAN HAS FALLEN! Treasure Vault opened on the seabed!", "Success", "👑")
 			end
 
-			-- Play belly-up rolling and sinking fade-out (No instant disappearance!)
 			playCreatureDeathSequence(deadModel)
 
 			task.delay(20, function()
@@ -557,3 +574,5 @@ RunService.Heartbeat:Connect(function(dt: number)
 		end
 	end
 end)
+
+print("[Deep Tides] CreatureServer: Defeat SFX & CreatureAttackImpact active across all zones.")
