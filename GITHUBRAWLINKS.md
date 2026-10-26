@@ -28,3 +28,5 @@ https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/src/ServerScriptServ
 https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/src/StarterPlayer/StarterPlayerScripts/Controllers/UIController.client.luau
 https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/src/StarterPlayer/StarterPlayerScripts/Controllers/OxygenClient.client.luau
 https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/src/StarterPlayer/StarterPlayerScripts/Controllers/CombatClient.client.luau
+https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/src/StarterPlayer/StarterPlayerScripts/Controllers/UnderwaterVFXController.client.luau
+https://raw.githubusercontent.com/Jimcarryyy/DeepTides/main/src/StarterPlayer/StarterPlayerScripts/Controllers/SoundController.client.luau
