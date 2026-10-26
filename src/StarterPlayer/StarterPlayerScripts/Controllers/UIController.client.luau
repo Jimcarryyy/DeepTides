@@ -93,14 +93,38 @@ local bossHPText = bossBar and bossBar:FindFirstChild("BarBg") and bossBar.BarBg
 
 local actionBar = MainHUD:WaitForChild("CombatActionBar", 3) :: Frame?
 local slotAttack = actionBar and actionBar:FindFirstChild("Slot_Attack") :: Frame?
-local slotAttackTitle = slotAttack and slotAttack:FindFirstChild("TitleLabel") :: TextLabel?
+local slotAttackToolIcon = slotAttack and slotAttack:FindFirstChild("ToolIcon") :: ImageLabel?
 local slotAttackStroke = slotAttack and slotAttack:FindFirstChildOfClass("UIStroke") :: UIStroke?
+local slotAttackAction = slotAttack and slotAttack:FindFirstChild("ActionLabel") :: TextLabel?
+
 local slotAbility = actionBar and actionBar:FindFirstChild("Slot_Ability") :: Frame?
 local slotDodge = actionBar and actionBar:FindFirstChild("Slot_Dodge") :: Frame?
 
+-- Audio Assets
 local sfxCollect = SoundService:WaitForChild("SFX_Collect", 3) :: Sound?
 local sfxSell = SoundService:WaitForChild("SFX_Sell", 3) :: Sound?
 local sfxZoneSwitcher = SoundService:WaitForChild("ZoneSwitcher", 5) :: Sound?
+local sfxUIClick = SoundService:WaitForChild("SFX_UIClick", 3) :: Sound?
+local sfxGearUpgrade = SoundService:WaitForChild("SFX_GearUpgrade", 3) :: Sound?
+local sfxPrestige = SoundService:WaitForChild("SFX_Prestige", 3) :: Sound?
+
+local function playUIClick()
+	if sfxUIClick then
+		sfxUIClick:Play()
+	else
+		local clickSound = SoundService:FindFirstChild("SFX_UIClick") :: Sound?
+		if clickSound then clickSound:Play() end
+	end
+end
+
+-- 2D TOOL ICON ASSETS
+local TOOL_2D_ICONS = {
+	[1] = "rbxassetid://127693503289585", -- Gear_Tool_T1_RustyKnife
+	[2] = "rbxassetid://134893790957976", -- Gear_Tool_T2_SteelSpear
+	[3] = "rbxassetid://80306708713057",  -- Gear_Tool_T3_TitaniumHarpoon
+	[4] = "rbxassetid://110126679421895", -- Gear_Tool_T4_ObsidianWarPick
+	[5] = "rbxassetid://133162210401549", -- Gear_Tool_T5_TridentOfTheDeep
+}
 
 local PEARL_ICON_ASSET = "rbxassetid://101610215510039"
 local STUD_TEXTURE = "rbxassetid://18878365966"
@@ -124,6 +148,8 @@ local currentData = {
 	PrestigeLevel = 0,
 	OwnedPasses = {} :: { [string]: boolean },
 }
+
+local hasReceivedInitialData = false
 
 -- ===================================================================
 -- 0. DYNAMIC SCROLLING CANVAS BINDINGS
@@ -174,6 +200,7 @@ end
 
 if autoO2BuyBtn then
 	autoO2BuyBtn.MouseButton1Click:Connect(function()
+		playUIClick()
 		TestBuyProduct:FireServer("EmergencyOxygen")
 		hideAutoOxygenPrompt()
 	end)
@@ -201,6 +228,7 @@ end
 
 if autoReviveBuyBtn then
 	autoReviveBuyBtn.MouseButton1Click:Connect(function()
+		playUIClick()
 		TestBuyProduct:FireServer("ReviveToken")
 		hideAutoRevivePrompt()
 	end)
@@ -301,6 +329,7 @@ local function hookStoreButtons()
 				end
 
 				buyBtn.MouseButton1Click:Connect(function()
+					playUIClick()
 					if currentData.OwnedPasses and currentData.OwnedPasses[itemKey] == true then
 						return
 					end
@@ -333,8 +362,20 @@ local function closeStore()
 	storeModal.Visible = false
 end
 
-if storeButton then storeButton.MouseButton1Click:Connect(openStore) end
-if storeCloseBtn then storeCloseBtn.MouseButton1Click:Connect(closeStore) end
+if storeButton then
+	storeButton.MouseButton1Click:Connect(function()
+		playUIClick()
+		openStore()
+	end)
+end
+
+if storeCloseBtn then
+	storeCloseBtn.MouseButton1Click:Connect(function()
+		playUIClick()
+		closeStore()
+	end)
+end
+
 task.defer(hookStoreButtons)
 
 -- ===================================================================
@@ -562,7 +603,12 @@ local function closeShop()
 	isShopAnimating = false
 end
 
-if closeButton then closeButton.MouseButton1Click:Connect(closeShop) end
+if closeButton then
+	closeButton.MouseButton1Click:Connect(function()
+		playUIClick()
+		closeShop()
+	end)
+end
 
 if shopList then
 	for category in pairs(catalogMap) do
@@ -570,6 +616,7 @@ if shopList then
 		local upgradeBtn = row and row:FindFirstChild("UpgradeButton") :: TextButton?
 		if upgradeBtn then
 			upgradeBtn.MouseButton1Click:Connect(function()
+				playUIClick()
 				RequestUpgrade:FireServer(category)
 			end)
 		end
@@ -646,9 +693,16 @@ local function closePrestigeModal()
 	prestigeModal.Visible = false
 end
 
-if prestigeCloseBtn then prestigeCloseBtn.MouseButton1Click:Connect(closePrestigeModal) end
+if prestigeCloseBtn then
+	prestigeCloseBtn.MouseButton1Click:Connect(function()
+		playUIClick()
+		closePrestigeModal()
+	end)
+end
+
 if prestigeActionBtn then
 	prestigeActionBtn.MouseButton1Click:Connect(function()
+		playUIClick()
 		if (currentData.PrestigeLevel or 0) >= 10 then return end
 		RequestPrestige:FireServer()
 		closePrestigeModal()
@@ -668,7 +722,7 @@ end
 task.defer(hookPrestigeShrinePrompt)
 
 -- ===================================================================
--- 6. RESPONSIVE NOTIFICATION TOAST & CLEAN SILENCED KILL NOTIFS
+-- 6. RESPONSIVE NOTIFICATION TOAST & STRICT AUDIO FILTER
 -- ===================================================================
 local currentToastId = 0
 local function showNotification(message: string, style: string?, icon: string?, isZoneEntry: boolean?)
@@ -680,14 +734,19 @@ local function showNotification(message: string, style: string?, icon: string?, 
 	toastMessage.Text = message
 	if toastIcon then toastIcon.Text = icon or "✨" end
 
-	-- Check if this is a creature kill notification
+	-- Audio Isolation Filters
 	local isKillNotification = (icon == "⚔️") or (string.find(message, "Defeated ") ~= nil)
+	local isAbilityNotification = (icon == "🛡️") or (string.find(message, "Iron Skin") ~= nil) or (string.find(message, "Special") ~= nil)
 
 	if style == "Success" then
 		if toastStroke then toastStroke.Color = Color3.fromRGB(50, 215, 120) end
-		-- SILENCE: Never play cash register sound when killing a creature
-		if sfxSell and not isKillNotification then
-			sfxSell:Play()
+
+		-- SFX_Sell plays ONLY on actual dock sales, NEVER on creature kills or ability activations
+		if sfxSell and not isKillNotification and not isAbilityNotification then
+			local isSaleToast = string.find(message, "Sold") ~= nil or string.find(message, "Pearls") ~= nil
+			if isSaleToast then
+				sfxSell:Play()
+			end
 		end
 	elseif style == "Warning" then
 		if toastStroke then toastStroke.Color = Color3.fromRGB(255, 130, 60) end
@@ -696,7 +755,7 @@ local function showNotification(message: string, style: string?, icon: string?, 
 		if isZoneEntry then
 			if sfxZoneSwitcher then sfxZoneSwitcher:Play() end
 		else
-			if sfxCollect and not isKillNotification then
+			if sfxCollect and not isKillNotification and not isAbilityNotification then
 				sfxCollect:Play()
 			end
 		end
@@ -752,25 +811,28 @@ task.spawn(function()
 	end
 end)
 
+-- Dynamic Equip Visual Highlight & Weapon Sync
 local function updateEquippedVisual()
 	local char = LocalPlayer.Character
-	if not char or not slotAttackTitle or not slotAttackStroke then return end
+	if not char or not slotAttackStroke or not slotAttackAction then return end
 
 	local tool = char:FindFirstChildOfClass("Tool")
-	if tool and tool.Name:match("^DivingTool_") then
-		slotAttackTitle.Text = "ATTACK"
-		slotAttackTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-		slotAttackStroke.Color = Color3.fromRGB(48, 120, 195)
+	if tool then
+		slotAttackAction.Text = "HOLSTER [1]"
+		slotAttackAction.TextColor3 = Color3.fromRGB(255, 235, 120)
+		slotAttackStroke.Color = Color3.fromRGB(70, 195, 255)
+		slotAttackStroke.Transparency = 0.35
 	else
-		slotAttackTitle.Text = "EQUIP"
-		slotAttackTitle.TextColor3 = Color3.fromRGB(180, 195, 210)
-		slotAttackStroke.Color = Color3.fromRGB(70, 85, 100)
+		slotAttackAction.Text = "EQUIP [1]"
+		slotAttackAction.TextColor3 = Color3.fromRGB(190, 215, 235)
+		slotAttackStroke.Color = Color3.fromRGB(255, 255, 255)
+		slotAttackStroke.Transparency = 0.82
 	end
 end
 
 task.spawn(function()
 	while true do
-		task.wait(0.2)
+		task.wait(0.15)
 		updateEquippedVisual()
 	end
 end)
@@ -778,7 +840,48 @@ end)
 -- ===================================================================
 -- 7. HUD & OXYGEN CONTROLLER
 -- ===================================================================
+local function updateToolIcon(tier: number)
+	if not slotAttackToolIcon then
+		if slotAttack then
+			slotAttackToolIcon = slotAttack:FindFirstChild("ToolIcon") :: ImageLabel?
+		end
+	end
+
+	if slotAttackToolIcon then
+		local assetId = TOOL_2D_ICONS[tier] or TOOL_2D_ICONS[1]
+		slotAttackToolIcon.Image = assetId
+	end
+end
+
 PlayerDataUpdate.OnClientEvent:Connect(function(data)
+	if hasReceivedInitialData then
+		local hasUpgradedGear = (data.OxygenTankTier and data.OxygenTankTier > currentData.OxygenTankTier)
+			or (data.LootBagTier and data.LootBagTier > currentData.LootBagTier)
+			or (data.SpeedFinsTier and data.SpeedFinsTier > currentData.SpeedFinsTier)
+			or (data.DivingSuitTier and data.DivingSuitTier > currentData.DivingSuitTier)
+			or (data.DivingToolTier and data.DivingToolTier > currentData.DivingToolTier)
+
+		if hasUpgradedGear then
+			if sfxGearUpgrade then
+				sfxGearUpgrade:Play()
+			else
+				local upgradeSound = SoundService:FindFirstChild("SFX_GearUpgrade") :: Sound?
+				if upgradeSound then upgradeSound:Play() end
+			end
+		end
+
+		if data.PrestigeLevel ~= nil and data.PrestigeLevel > currentData.PrestigeLevel then
+			if sfxPrestige then
+				sfxPrestige:Play()
+			else
+				local prestigeSound = SoundService:FindFirstChild("SFX_Prestige") :: Sound?
+				if prestigeSound then prestigeSound:Play() end
+			end
+		end
+	else
+		hasReceivedInitialData = true
+	end
+
 	if data.Pearls ~= nil then
 		currentData.Pearls = data.Pearls
 		if pearlsText then pearlsText.Text = tostring(data.Pearls) end
@@ -788,7 +891,14 @@ PlayerDataUpdate.OnClientEvent:Connect(function(data)
 	if data.LootBagTier then currentData.LootBagTier = data.LootBagTier end
 	if data.SpeedFinsTier then currentData.SpeedFinsTier = data.SpeedFinsTier end
 	if data.DivingSuitTier then currentData.DivingSuitTier = data.DivingSuitTier end
-	if data.DivingToolTier then currentData.DivingToolTier = data.DivingToolTier end
+
+	if data.DivingToolTier then
+		currentData.DivingToolTier = data.DivingToolTier
+		updateToolIcon(data.DivingToolTier)
+	else
+		updateToolIcon(currentData.DivingToolTier)
+	end
+
 	if data.PrestigeLevel ~= nil then currentData.PrestigeLevel = data.PrestigeLevel end
 	if data.OwnedPasses ~= nil then
 		currentData.OwnedPasses = data.OwnedPasses
@@ -806,12 +916,6 @@ PlayerDataUpdate.OnClientEvent:Connect(function(data)
 			pvpText.TextColor3 = Color3.fromRGB(180, 195, 210)
 			pvpStroke.Color = Color3.fromRGB(90, 105, 120)
 		end
-	end
-
-	if slotAttack and data.DivingToolTier then
-		local toolConfig = GearConfig.DivingTools[data.DivingToolTier] or GearConfig.DivingTools[1]
-		local actionLabel = slotAttack:FindFirstChild("ActionLabel") :: TextLabel?
-		if actionLabel then actionLabel.Text = toolConfig.Name:upper() end
 	end
 
 	if slotAbility and data.DivingSuitTier then
@@ -873,4 +977,8 @@ OxygenUpdate.OnClientEvent:Connect(function(cur: number, max: number, isSubmerge
 	end
 end)
 
-print("[Deep Tides] UIController: Kill notification SFX silenced. ZoneSwitcher preserved.")
+task.defer(function()
+	updateToolIcon(currentData.DivingToolTier or 1)
+end)
+
+print("[Deep Tides] UIController: Active with dynamic 2D weapon icon & isolated notification audio.")

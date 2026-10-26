@@ -1,6 +1,6 @@
 --!strict
 -- CombatClient.client.luau
--- R6 Combat Controller: Smooth Over-The-Shoulder Glide, 85 studs/s Spear Flight & Creature Impale Sticking
+-- R6 Combat Controller: Tool Equip [1] Key Handling, Smooth Aim Glide, 85 studs/s Harpoon Flight & Impale Sticking
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -41,6 +41,40 @@ local harpoonSfx = toolsSfxFolder:WaitForChild("Harpoon") :: Sound
 
 local monsterHitSfx = SoundService:WaitForChild("MonsterHitImpact") :: Sound
 local dodgeSound = SoundService:WaitForChild("UnderWaterDodge") :: Sound
+
+-- Dedicated Tool Equip/Unequip & Ability Audio
+local lastEquipTime = 0
+local lastUnequipTime = 0
+local TOOL_SFX_DEBOUNCE = 0.15
+
+local function playToolEquipSFX()
+	local now = os.clock()
+	if now - lastEquipTime < TOOL_SFX_DEBOUNCE then return end
+	lastEquipTime = now
+
+	local sfx = toolsSfxFolder:FindFirstChild("ToolEquip") :: Sound? or SoundService:FindFirstChild("ToolEquip") :: Sound?
+	if sfx then
+		sfx:Play()
+	end
+end
+
+local function playToolUnequipSFX()
+	local now = os.clock()
+	if now - lastUnequipTime < TOOL_SFX_DEBOUNCE then return end
+	lastUnequipTime = now
+
+	local sfx = toolsSfxFolder:FindFirstChild("ToolUnequip") :: Sound? or SoundService:FindFirstChild("ToolUnequip") :: Sound?
+	if sfx then
+		sfx:Play()
+	end
+end
+
+local function playIronSkinSFX()
+	local sfx = SoundService:FindFirstChild("AbilityIronSkin") :: Sound? or toolsSfxFolder:FindFirstChild("AbilityIronSkin") :: Sound?
+	if sfx then
+		sfx:Play()
+	end
+end
 
 -- Animations
 local slash1Anim = Instance.new("Animation")
@@ -109,7 +143,7 @@ local function flashHitmarker()
 end
 
 -- ===================================================================
--- 2. TOOL TIER IDENTIFICATION
+-- 2. TOOL TIER IDENTIFICATION & EQUIP TOGGLE ([1] KEY)
 -- ===================================================================
 local function getToolTier(tool: Tool?): number
 	if not tool then return 1 end
@@ -119,7 +153,7 @@ local function getToolTier(tool: Tool?): number
 	local name = string.lower(tool.Name)
 	if string.find(name, "harpoon") or string.find(name, "tool_3") or string.find(name, "divingtool_3") then
 		return 3
-	elseif string.find(name, "axe") or string.find(name, "tool_4") or string.find(name, "divingtool_4") then
+	elseif string.find(name, "warpick") or string.find(name, "axe") or string.find(name, "tool_4") or string.find(name, "divingtool_4") then
 		return 4
 	elseif string.find(name, "trident") or string.find(name, "tool_5") or string.find(name, "divingtool_5") then
 		return 5
@@ -136,8 +170,30 @@ local function getEquippedTool(): Tool?
 	return char:FindFirstChildOfClass("Tool")
 end
 
+local function toggleToolEquipped()
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not hum or hum.Health <= 0 then return end
+
+	local currentTool = char:FindFirstChildOfClass("Tool")
+	if currentTool then
+		-- Holster tool to backpack
+		hum:UnequipTools()
+	else
+		-- Draw tool from backpack
+		local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+		if backpack then
+			local tool = backpack:FindFirstChildOfClass("Tool")
+			if tool then
+				hum:EquipTool(tool)
+			end
+		end
+	end
+end
+
 -- ===================================================================
--- 3. ANIMATION TRACK MANAGEMENT
+-- 3. ANIMATION TRACK MANAGEMENT & TOOL SFX HOOKS
 -- ===================================================================
 local slashTrack1: AnimationTrack? = nil
 local slashTrack2: AnimationTrack? = nil
@@ -171,8 +227,18 @@ local function loadTracks(character: Model)
 	for _, child in ipairs(character:GetChildren()) do
 		if child:IsA("Tool") then hookTool(child) end
 	end
+
 	character.ChildAdded:Connect(function(child)
-		if child:IsA("Tool") then hookTool(child) end
+		if child:IsA("Tool") then
+			hookTool(child)
+			playToolEquipSFX()
+		end
+	end)
+
+	character.ChildRemoved:Connect(function(child)
+		if child:IsA("Tool") then
+			playToolUnequipSFX()
+		end
 	end)
 end
 
@@ -208,7 +274,6 @@ local function spawnHarpoonBullet(startPos: Vector3, direction: Vector3)
 	bubbleWake.LightEmission = 0.5
 	bubbleWake.Parent = root
 
-	-- FAIR UNDERWATER TRAVEL SPEED (85 studs/s allows you to watch the spear fly)
 	local bodyVelocity = Instance.new("BodyVelocity")
 	bodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
 	bodyVelocity.Velocity = direction * 85
@@ -233,12 +298,10 @@ local function spawnHarpoonBullet(startPos: Vector3, direction: Vector3)
 						hasHit = true
 						if connection then connection:Disconnect() end
 
-						-- 1. Feedback
 						flashHitmarker()
 						monsterHitSfx.PlaybackSpeed = math.random(95, 105) / 100
 						monsterHitSfx:Play()
 
-						-- 2. IMPALE: Stop velocity and weld spear into creature's body
 						if bodyVelocity then bodyVelocity:Destroy() end
 						bubbleWake.Enabled = false
 
@@ -246,9 +309,8 @@ local function spawnHarpoonBullet(startPos: Vector3, direction: Vector3)
 						weld.Part0 = cRoot
 						weld.Part1 = root
 						weld.Parent = bullet
-						bullet.Parent = creature -- Moves naturally with the creature
+						bullet.Parent = creature
 
-						-- 3. Stays stuck in creature for 3.5 seconds, then dissolves away
 						task.delay(3.5, function()
 							if bullet and bullet.Parent then
 								for _, p in ipairs(bullet:GetDescendants()) do
@@ -271,7 +333,6 @@ local function spawnHarpoonBullet(startPos: Vector3, direction: Vector3)
 		end
 	end)
 
-	-- Fallback flight timeout if missed (travels ~75 studs before sinking)
 	task.delay(0.90, function()
 		if connection then connection:Disconnect() end
 		if not hasHit and bullet and bullet.Parent then
@@ -367,11 +428,15 @@ triggerAttack = function()
 	if hrp.Position.Y > ZoneConfig.WATER_SURFACE_Y then return end
 
 	local equippedTool = getEquippedTool()
+	if not equippedTool then
+		-- Automatically draw tool if player attempts to attack while unequipped
+		toggleToolEquipped()
+		return
+	end
+
 	local tier = getToolTier(equippedTool)
 
-	-- ==============================================================
-	-- A. TIER 3: HARPOON GUN (SMOOTH HYDRODYNAMIC SWIVEL & RECOIL)
-	-- ==============================================================
+	-- Harpoon Gun (Tier 3)
 	if tier == 3 then
 		isAttackOnCooldown = true
 
@@ -380,7 +445,6 @@ triggerAttack = function()
 			aimDir = (currentLockedPosition - (hrp.Position + Vector3.new(0, 0.4, 0))).Unit
 		end
 
-		-- Smooth 0.22s Hydrodynamic Swivel (Eliminates snapping)
 		local flatAim = Vector3.new(aimDir.X, 0, aimDir.Z)
 		if flatAim.Magnitude > 0.05 then
 			local targetBodyCFrame = CFrame.lookAt(hrp.Position, hrp.Position + flatAim.Unit)
@@ -389,7 +453,6 @@ triggerAttack = function()
 			}):Play()
 		end
 
-		-- Subtle Underwater Camera Recoil Kick
 		local defaultAimOffset = Vector3.new(2.6, 0.5, -0.8)
 		local recoilOffset = defaultAimOffset + Vector3.new(-0.25, 0.1, 0.45)
 		TweenService:Create(hum, TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
@@ -422,9 +485,7 @@ triggerAttack = function()
 		return
 	end
 
-	-- ==============================================================
-	-- B. MELEE WEAPONS: 2-HIT RECOVERY COMBO
-	-- ==============================================================
+	-- Melee Weapons (Tiers 1, 2, 4, 5)
 	local now = os.clock()
 	if now - lastMeleeSwingTime > COMBO_RESET_WINDOW then
 		comboStep = 1
@@ -483,8 +544,7 @@ local function setAimMode(enabled: boolean, hum: Humanoid?)
 	if enabled then
 		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 		if hum then
-			hum.AutoRotate = true -- Free natural swimming preserved
-			-- TWEEN CameraOffset over 0.35s so the camera glides smoothly over the shoulder!
+			hum.AutoRotate = true
 			TweenService:Create(hum, TweenInfo.new(0.35, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
 				CameraOffset = AIM_CAMERA_OFFSET,
 			}):Play()
@@ -500,7 +560,6 @@ local function setAimMode(enabled: boolean, hum: Humanoid?)
 		hitMarker.Visible = false
 		if hum then
 			hum.AutoRotate = true
-			-- Glide back to center smoothly
 			TweenService:Create(hum, TweenInfo.new(0.30, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
 				CameraOffset = Vector3.zero,
 			}):Play()
@@ -619,6 +678,8 @@ local function triggerSpecial()
 
 	isSpecialOnCooldown = true
 
+	playIronSkinSFX()
+
 	if currentShieldClone then
 		currentShieldClone:Destroy()
 		currentShieldClone = nil
@@ -674,7 +735,10 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 
 	if gameProcessed then return end
 
-	if input.KeyCode == Enum.KeyCode.LeftAlt or input.KeyCode == Enum.KeyCode.RightAlt then
+	-- [1] Key: Equip / Holster Toggle
+	if input.KeyCode == Enum.KeyCode.One then
+		toggleToolEquipped()
+	elseif input.KeyCode == Enum.KeyCode.LeftAlt or input.KeyCode == Enum.KeyCode.RightAlt then
 		toggleAimManual()
 	elseif input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.Space then
 		triggerDodge()
@@ -685,10 +749,18 @@ end)
 
 -- UI Action Bar Bindings
 task.spawn(function()
-	local hud = playerGui:WaitForChild("HUD", 10)
-	if not hud then return end
-	local actionBar = hud:FindFirstChild("ActionBar", true)
+	local mainHUD = playerGui:WaitForChild("MainHUD", 10)
+	if not mainHUD then return end
+	local actionBar = mainHUD:FindFirstChild("CombatActionBar", true)
 	if not actionBar then return end
+
+	local slotAttack = actionBar:FindFirstChild("Slot_Attack") :: Frame?
+	if slotAttack then
+		local btn = slotAttack:FindFirstChildOfClass("TextButton") or slotAttack:FindFirstChildOfClass("ImageButton")
+		if btn then
+			btn.MouseButton1Click:Connect(toggleToolEquipped)
+		end
+	end
 
 	local attackBtn = actionBar:FindFirstChild("AttackButton", true) :: TextButton?
 	if attackBtn then attackBtn.MouseButton1Click:Connect(triggerAttack) end
@@ -700,4 +772,4 @@ task.spawn(function()
 	if specialBtn then specialBtn.MouseButton1Click:Connect(triggerSpecial) end
 end)
 
-print("[Deep Tides] CombatClient: Smooth camera glide, 85 studs/s flight & creature impale active.")
+print("[Deep Tides] CombatClient: Active with [1] Key Tool Equip and audio.")

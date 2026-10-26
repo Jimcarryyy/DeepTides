@@ -34,6 +34,15 @@ local AUDIO_CONFIG = {
 -- ===================================================================
 -- 2. SETUP & RESOLVE SOUNDSERVICE OBJECTS
 -- ===================================================================
+-- Hard-silence legacy ocean BGM if present
+local legacyOceanBgm = SoundService:FindFirstChild("BGM_RelaxingOcean") :: Sound?
+if legacyOceanBgm then
+	legacyOceanBgm:Stop()
+	legacyOceanBgm.Playing = false
+	legacyOceanBgm.Looped = false
+	legacyOceanBgm.Volume = 0
+end
+
 local zoneFolder = SoundService:WaitForChild("ZoneSFX", 10) :: Folder?
 if not zoneFolder then
 	zoneFolder = Instance.new("Folder")
@@ -49,7 +58,6 @@ for zoneId = 1, 5 do
 	local cfg = AUDIO_CONFIG.Zones[zoneId]
 	local soundName = "Zone" .. tostring(zoneId)
 
-	-- Search for exact name or with suffix
 	local sound = zoneFolder:FindFirstChild(soundName) :: Sound?
 	if not sound then
 		sound = zoneFolder:FindFirstChild(soundName .. "_Reef")
@@ -70,12 +78,10 @@ for zoneId = 1, 5 do
 	sound.Volume = 0
 	sound.RollOffMode = Enum.RollOffMode.Linear
 
-	-- Continuous playback watchdog so loops never drop
 	sound.Ended:Connect(function()
 		sound:Play()
 	end)
 
-	-- Start playing silently in background for instant volume cross-fades
 	sound:Play()
 
 	zoneSounds[zoneId] = sound
@@ -113,19 +119,23 @@ splashInSound.SoundId = AUDIO_CONFIG.SplashIn.Id
 splashInSound.Volume = AUDIO_CONFIG.SplashIn.Volume
 table.insert(preloadList, splashInSound)
 
--- Background audio preloading
 task.spawn(function()
 	pcall(function()
 		ContentProvider:PreloadAsync(preloadList)
 	end)
 end)
 
--- Surface BGM
+-- Surface BGM (BGM_SurfaceIsland is authoritative)
 local function getSurfaceBgm(): Sound?
-	local byName = SoundService:FindFirstChild("BGM_RelaxingOcean") :: Sound?
-	if byName then return byName end
+	local byName = SoundService:FindFirstChild("BGM_SurfaceIsland") :: Sound?
+	if byName then
+		byName.Looped = true
+		return byName
+	end
+
 	for _, s in ipairs(SoundService:GetDescendants()) do
-		if s:IsA("Sound") and string.find(s.SoundId, "124266550217625") then
+		if s:IsA("Sound") and (s.Name == "BGM_SurfaceIsland" or string.find(s.SoundId, "104793220202039")) then
+			s.Looped = true
 			return s
 		end
 	end
@@ -151,6 +161,14 @@ RunService.RenderStepped:Connect(function(dt: number)
 	local now = os.clock()
 	local cameraY = Camera.CFrame.Position.Y
 	local isCameraUnderwater = cameraY <= ZoneConfig.WATER_SURFACE_Y
+
+	-- Extra check: Keep legacy ocean BGM permanently muted if it spawns in
+	local staleLegacy = SoundService:FindFirstChild("BGM_RelaxingOcean") :: Sound?
+	if staleLegacy and staleLegacy.Playing then
+		staleLegacy:Stop()
+		staleLegacy.Playing = false
+		staleLegacy.Volume = 0
+	end
 
 	-- 1. WATER ENTRY SPLASH ONLY
 	local char = LocalPlayer.Character
@@ -182,8 +200,8 @@ RunService.RenderStepped:Connect(function(dt: number)
 				surfaceBgm:Pause()
 			end
 		else
-			if not surfaceBgm.IsPlaying then surfaceBgm:Resume() end
-			surfaceBgm.Volume = lerp(surfaceBgm.Volume, 0.35, t)
+			if not surfaceBgm.IsPlaying then surfaceBgm:Play() end
+			surfaceBgm.Volume = lerp(surfaceBgm.Volume, 0.40, t)
 		end
 	end
 
@@ -223,4 +241,4 @@ RunService.RenderStepped:Connect(function(dt: number)
 	end
 end)
 
-print("[Deep Tides] SoundController: Active with boosted 1.45-1.70 volume & zero dropouts.")
+print("[Deep Tides] SoundController: Active with BGM_SurfaceIsland isolation.")
