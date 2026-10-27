@@ -1,8 +1,10 @@
 --!strict
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
+local SoundService = game:GetService("SoundService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
+local StarterGui = game:GetService("StarterGui")
 local HttpService = game:GetService("HttpService")
 
 -- ===================================================================
@@ -50,7 +52,85 @@ local ShowRevivePrompt = remotesFolder:WaitForChild("ShowRevivePrompt") :: Remot
 local HideRevivePrompt = remotesFolder:WaitForChild("HideRevivePrompt") :: RemoteEvent
 local NotifyClient = remotesFolder:WaitForChild("NotifyClient") :: RemoteEvent
 
-local updatePvPVisuals: (player: Player, isEnabled: boolean) -> ()
+local damageSfxFolder = SoundService:WaitForChild("DamageSFX", 10) :: Folder?
+
+-- Roman Numerals for Prestige Ranks I - X
+local PRESTIGE_ROMAN = {
+	[1] = "I",
+	[2] = "II",
+	[3] = "III",
+	[4] = "IV",
+	[5] = "V",
+	[6] = "VI",
+	[7] = "VII",
+	[8] = "VIII",
+	[9] = "IX",
+	[10] = "X",
+}
+
+-- Locate OverheadTag template reliably
+local function getOverheadTagTemplate(): BillboardGui?
+	local tag = ReplicatedStorage:WaitForChild("OverheadTag", 10) :: BillboardGui?
+	if tag and tag:IsA("BillboardGui") then return tag end
+
+	tag = StarterGui:FindFirstChild("OverheadTag") :: BillboardGui?
+	if tag and tag:IsA("BillboardGui") then return tag end
+
+	return nil
+end
+
+-- Spawns and configures the custom Prestige Overhead Tag on the player's head
+local function updatePrestigeOverhead(player: Player)
+	local char = player.Character
+	if not char then return end
+	local head = char:FindFirstChild("Head") :: BasePart?
+	if not head then return end
+
+	-- Clean up legacy text badges and previous OverheadTags
+	for _, child in ipairs(head:GetChildren()) do
+		if child:IsA("BillboardGui") then
+			child:Destroy()
+		end
+	end
+
+	local profile = PlayerDataManager.GetProfile(player)
+	local prestigeLevel = if profile and profile.Data.PrestigeLevel then profile.Data.PrestigeLevel else 0
+
+	-- Only show the Prestige tag if the player has prestiged (Rank 1+)
+	if prestigeLevel <= 0 then return end
+
+	local template = getOverheadTagTemplate()
+	if not template then
+		warn("⚠️ OverheadTag BillboardGui not found in ReplicatedStorage!")
+		return
+	end
+
+	local tag = template:Clone()
+	tag.Name = "OverheadTag"
+	tag.Adornee = head
+	tag.AlwaysOnTop = true
+	tag.Enabled = true -- Enforces visibility even if template is set to Enabled = false
+
+	if tag.StudsOffset == Vector3.zero then
+		tag.StudsOffset = Vector3.new(0, 2.5, 0)
+	end
+
+	local banner = tag:FindFirstChild("Banner")
+	local content = banner and banner:FindFirstChild("Content")
+	local rankLabel = content and content:FindFirstChild("Rank") :: TextLabel?
+	local titleLabel = content and content:FindFirstChild("Title") :: TextLabel?
+
+	local roman = PRESTIGE_ROMAN[prestigeLevel] or tostring(prestigeLevel)
+
+	if titleLabel then
+		titleLabel.Text = "PRESTIGE"
+	end
+	if rankLabel then
+		rankLabel.Text = roman
+	end
+
+	tag.Parent = head
+end
 
 -- Spawns a physical loot bag on the seabed when a player dies in PvP mode
 local function spawnDroppedLootBag(position: Vector3, bagItems: { any }, victim: Player)
@@ -98,7 +178,6 @@ local function spawnDroppedLootBag(position: Vector3, bagItems: { any }, victim:
 			end
 		end
 
-		-- PREVENT DUPLICATION: If looted, wipe victim's backup and close their revive window!
 		if victim:IsDescendantOf(Players) then
 			victim:SetAttribute("LastDroppedLoot", nil)
 			HideRevivePrompt:FireClient(victim)
@@ -122,8 +201,17 @@ local function handleCharacterAdded(player: Player, char: Model)
 	local profile = PlayerDataManager.GetProfile(player)
 
 	if profile and profile.Data.PvPEnabled then
-		updatePvPVisuals(player, true)
+		char:SetAttribute("PvPEnabled", true)
+	else
+		char:SetAttribute("PvPEnabled", false)
 	end
+
+	-- Apply custom Prestige Overhead Tag and clear legacy text
+	task.spawn(function()
+		updatePrestigeOverhead(player)
+		task.wait(0.6)
+		updatePrestigeOverhead(player)
+	end)
 
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	humanoid.Died:Connect(function()
@@ -132,7 +220,6 @@ local function handleCharacterAdded(player: Player, char: Model)
 		local currentBag = PlayerDataManager.GetBag(player)
 
 		if inPvP then
-			-- PvP Death: Drop physical bag on seabed & allow 30s revive race
 			player:SetAttribute("LastDroppedLoot", HttpService:JSONEncode(currentBag))
 			player:SetAttribute("LastPvPDeathTime", os.clock())
 
@@ -149,7 +236,6 @@ local function handleCharacterAdded(player: Player, char: Model)
 				end
 			end)
 		else
-			-- PvE Death (Drowning, Wildlife, Pressure): Loot is lost to the sea!
 			if #currentBag > 0 then
 				PlayerDataManager.ClearBag(player)
 				NotifyClient:FireClient(player, "YOU DIED!", "You lost your collected loot. Upgrade your gear to dive deeper!", "Warning", "💀")
@@ -185,56 +271,23 @@ end)
 local RequestPrestige = remotesFolder:WaitForChild("RequestPrestige") :: RemoteEvent
 RequestPrestige.OnServerEvent:Connect(function(player: Player)
 	PlayerDataManager.Prestige(player)
+	updatePrestigeOverhead(player)
 end)
 
 -- ===================================================================
--- 3. PVP OPT-IN TOGGLE & CLEAN TEXT-ONLY OVERHEAD BADGES
+-- 3. PVP OPT-IN TOGGLE (ATTRIBUTE ONLY - NO HARDCODED BADGE)
 -- ===================================================================
 local TogglePvP = remotesFolder:WaitForChild("TogglePvP") :: RemoteEvent
-
-updatePvPVisuals = function(player: Player, isEnabled: boolean)
-	local char = player.Character
-	if not char then return end
-	local head = char:FindFirstChild("Head") :: BasePart?
-	if not head then return end
-
-	local oldBadge = head:FindFirstChild("PvPBadge")
-	if oldBadge then oldBadge:Destroy() end
-
-	if isEnabled then
-		char:SetAttribute("PvPEnabled", true)
-		local bboard = Instance.new("BillboardGui")
-		bboard.Name = "PvPBadge"
-		bboard.Size = UDim2.new(0, 80, 0, 18)
-		bboard.StudsOffset = Vector3.new(0, 2.3, 0)
-		bboard.AlwaysOnTop = true
-		bboard.Parent = head
-
-		local badgeLabel = Instance.new("TextLabel")
-		badgeLabel.Size = UDim2.new(1, 0, 1, 0)
-		badgeLabel.BackgroundTransparency = 1
-		badgeLabel.BorderSizePixel = 0
-		badgeLabel.Text = "PVP"
-		badgeLabel.TextColor3 = Color3.fromRGB(255, 75, 75)
-		badgeLabel.Font = Enum.Font.FredokaOne
-		badgeLabel.TextSize = 13
-		badgeLabel.Parent = bboard
-
-		local stroke = Instance.new("UIStroke")
-		stroke.Color = Color3.fromRGB(15, 15, 20)
-		stroke.Thickness = 1.5
-		stroke.Parent = badgeLabel
-	else
-		char:SetAttribute("PvPEnabled", false)
-	end
-end
 
 TogglePvP.OnServerEvent:Connect(function(player: Player)
 	local profile = PlayerDataManager.GetProfile(player)
 	if not profile then return end
 
 	profile.Data.PvPEnabled = not (profile.Data.PvPEnabled or false)
-	updatePvPVisuals(player, profile.Data.PvPEnabled)
+	local char = player.Character
+	if char then
+		char:SetAttribute("PvPEnabled", profile.Data.PvPEnabled)
+	end
 	PlayerDataManager.SyncClient(player)
 
 	if profile.Data.PvPEnabled then
@@ -254,7 +307,10 @@ local function hookPvPStation()
 				local profile = PlayerDataManager.GetProfile(player)
 				if profile then
 					profile.Data.PvPEnabled = not (profile.Data.PvPEnabled or false)
-					updatePvPVisuals(player, profile.Data.PvPEnabled)
+					local char = player.Character
+					if char then
+						char:SetAttribute("PvPEnabled", profile.Data.PvPEnabled)
+					end
 					PlayerDataManager.SyncClient(player)
 
 					if profile.Data.PvPEnabled then
@@ -272,12 +328,12 @@ end
 task.defer(hookPvPStation)
 
 -- ===================================================================
--- 4. PVP ATTACKS
+-- 4. PVP ATTACKS (RANGED HARPOON & PVPWEAPONHIT 3D AUDIO)
 -- ===================================================================
 local AttackRequest = remotesFolder:WaitForChild("AttackRequest") :: RemoteEvent
 local playerAttackCooldowns: { [Player]: number } = {}
 
-AttackRequest.OnServerEvent:Connect(function(attacker: Player)
+AttackRequest.OnServerEvent:Connect(function(attacker: Player, clientAimDir: any)
 	local attackerChar = attacker.Character
 	if not attackerChar then return end
 	local attackerHRP = attackerChar:FindFirstChild("HumanoidRootPart") :: BasePart?
@@ -292,10 +348,16 @@ AttackRequest.OnServerEvent:Connect(function(attacker: Player)
 
 	local now = os.clock()
 	local lastAttack = playerAttackCooldowns[attacker] or 0
-	if now - lastAttack < toolConfig.Cooldown then return end
+	if now - lastAttack < (toolConfig.Cooldown - 0.05) then return end
 	playerAttackCooldowns[attacker] = now
 
-	local ATTACK_RANGE = 12.0
+	local isRangedHarpoon = (toolTier == 3)
+	local attackRange = if isRangedHarpoon then 65.0 else 14.0
+
+	local aimDirection: Vector3 = if typeof(clientAimDir) == "Vector3" and clientAimDir.Magnitude > 0.1
+		then clientAimDir.Unit
+		else attackerHRP.CFrame.LookVector
+
 	for _, target in ipairs(Players:GetPlayers()) do
 		if target ~= attacker then
 			local targetChar = target.Character
@@ -304,8 +366,20 @@ AttackRequest.OnServerEvent:Connect(function(attacker: Player)
 				local targetHum = targetChar:FindFirstChildOfClass("Humanoid")
 
 				if targetHRP and targetHum and targetHum.Health > 0 and targetHRP.Position.Y < 0.5 then
-					local dist = (targetHRP.Position - attackerHRP.Position).Magnitude
-					if dist <= ATTACK_RANGE then
+					local toTarget = targetHRP.Position - attackerHRP.Position
+					local forwardDist = toTarget:Dot(aimDirection)
+
+					local isHit = false
+					if isRangedHarpoon then
+						if forwardDist > 1.5 and forwardDist <= attackRange then
+							local perpDist = (toTarget - (aimDirection * forwardDist)).Magnitude
+							if perpDist <= 4.0 then isHit = true end
+						end
+					else
+						if toTarget.Magnitude <= attackRange then isHit = true end
+					end
+
+					if isHit then
 						local baseDmg = toolConfig.Damage
 						local finalDmg = baseDmg
 
@@ -315,6 +389,17 @@ AttackRequest.OnServerEvent:Connect(function(attacker: Player)
 							NotifyClient:FireClient(target, string.format("Shield Blocked Hit! Took %d dmg from %s", finalDmg, attacker.Name), "Success", "🛡️")
 						else
 							NotifyClient:FireClient(target, string.format("Attacked by %s! (-%d HP)", attacker.Name, finalDmg), "Warning", "⚔️")
+						end
+
+						if damageSfxFolder and targetHRP then
+							local pvpSound = damageSfxFolder:FindFirstChild("PvPWeaponHit") :: Sound?
+							if pvpSound then
+								local sfx = pvpSound:Clone()
+								sfx.Parent = targetHRP
+								sfx.PlaybackSpeed = math.random(95, 105) / 100
+								sfx:Play()
+								task.delay(1.5, function() sfx:Destroy() end)
+							end
 						end
 
 						targetChar:SetAttribute("LastPvPAttacker", attacker.UserId)
@@ -452,4 +537,4 @@ AbilityRequest.OnServerEvent:Connect(function(player: Player)
 	end
 end)
 
-print("[Deep Tides] ServerInit: Clean text badges & anti-dupe PvP loop active.")
+print("[Deep Tides] ServerInit: Custom Prestige OverheadTag wired, legacy text wiped & PvPWeaponHit active.")

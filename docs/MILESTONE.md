@@ -1,47 +1,44 @@
-# Milestones & Delivery Tracker
+# Deep Tides — Milestone Progress Tracker
 
-## Phase 1: Gameplay Foundation ($620 AUD) — COMPLETED
-| Milestone | Deliverables | Budget (AUD) | Codebase Status | Approval Status |
-|---|---|---|---|---|
-| **Milestone 1** | **Playable Core Demo:** Atoll Dock, Zone 1 Shallow Reef, Oxygen system, Bag collection, Dock sell station, Pearls UI, ProfileService save | $186 | **100% Complete** | **Approved** |
-| **Milestone 2** | **Expanded Gameplay:** Zones 2 & 3 (Kelp Forest, Shipwreck), 5-Tier Gear Upgrade Shop, Creature AI (Jellyfish, Eel, Shark), Tool combat | $217 | **100% Complete** | **Approved** |
-| **Milestone 3** | **Endgame & Monetisation:** Zones 4 & 5 (Abyss, Cursed Deep), World Boss (The Leviathan), Treasure Vault, Opt-in PvP system, Prestige system, Full Monetisation engine | $217 | **100% Complete** | **Approved** |
+## Phase 1: Core Systems Contract — [COMPLETE]
+- Milestone 1: Core diving loop, oxygen drain, Terrain Water lagoon ($200 AUD) — **APPROVED & PAID**
+- Milestone 2: Economy, sell stall, gear shop, loot spawning ($200 AUD) — **APPROVED & PAID**
+- Milestone 3: Zones 4–5, boss, prestige, monetization foundation ($220 AUD) — **APPROVED & PAID**
 
 ---
 
-## Phase 2: Commercial Polish & Launch ($660 AUD) — ACTIVE
-| Milestone | Deliverables | Budget (AUD) | Target / Trigger | Status |
-|---|---|---|---|---|
-| **Milestone A** | **Custom 3D Models & Main Props:** All creatures, 5 tools, 12 loot items, surface hub, 4 docks, 5-zone props, chests, pitwalls | **$198** | Client approval of custom 3D assets | **APPROVED** (Paid via Wise) |
-| **Milestone B** | **UI/UX, VFX & Audio Polish:** Full UI redesign across all screens, zone-based water VFX & lighting, complete sound design | **$264** | Client approval of UI, VFX, and audio | **ACTIVE (In Progress)** |
-| **Milestone C** | **Live Robux & Launch Readiness:** Production product IDs, receipt validation, 2s auto-prompts, mobile/console QA, public release | **$198** | Full game polished and launch-ready | **PENDING** |
+## Phase 2: Commercial Polish & Launch — [ACTIVE, $660 AUD Total]
 
----
+### Milestone A: Custom 3D Models ($198 AUD) — **APPROVED & PAID**
+- [x] Delivered custom 3D models for all 5 creatures (Jellyfish, Eel, Shark, Octopus, Leviathan).
+- [x] Delivered main environment props (dock, stalls, shipwreck pieces, seabed landmarks).
+- [x] Client approval received and payment released via Wise.
 
-## Milestone Acceptance Criteria
+### Milestone B: UI/UX, Underwater VFX & Sound Design ($264 AUD) — **[ACTIVE ~85%]**
+- [x] **Underwater Dynamic Atmosphere & VFX:** 5-Zone depth lighting, vivid fog, high-visibility tuning in Zones 3–5, character bubbles, and 3D entry splash.
+- [x] **Complete Sound Design Polish:**
+  - [x] 5 Custom ElevenLabs zone ambient loops with boosted volume (1.45–1.70).
+  - [x] Complete surface BGM isolation underwater.
+  - [x] Continuous underwater drone and swimming bubbles.
+  - [x] 5 Unique 3D creature defeat sounds.
+  - [x] `CreatureAttackImpact` and `PvPWeaponHit` spatial audio.
+  - [x] `ZoneSwitcher` audio bound to depth transition toast notifications.
+  - [x] Silenced toast audio on creature kill notifications.
+- [x] **Combat & Weapon Systems Polish:**
+  - [x] True R6 avatar standardization.
+  - [x] Permanent `Tool.Grip` alignment across all 5 diving tools.
+  - [x] 2-Hit melee combo pacing (`Slash1` ➔ `Slash2` ➔ 1.35s recovery).
+  - [x] Harpoon 3D spear projectile, impale sticking effect, 85 studs/s flight speed, and 1.25s reload cooldown.
+  - [x] Automatic over-the-shoulder aim mode with `Alt` toggle, free natural swimming, and custom crosshair/lock/hitmarker UI.
+  - [x] Server-side true ray-line line-of-sight validation (65 studs ranged).
+  - [x] Natural 2.2s belly-up sinking creature death sequence.
+- [ ] User final visual polish pass on UI screens (Gear Shop, Sell Stall, HUD).
+- [ ] Mobile touch layout margins and thumbstick clearance verification.
+- [ ] Console Gamepad navigation check.
+- [ ] Client review and payment approval ($264 AUD).
 
-### Phase 2 Milestone A Acceptance (VERIFIED & APPROVED)
-- [x] Custom 3D models for all 5 creatures integrated in `ReplicatedStorage.CreatureModels`.
-- [x] Surface Hub complete: 2-tone studded grass, 18-stud timber walls, 4 lagoon boardwalk docks, reskinned shops, custom 3D Prestige Shrine, custom 3D PvP Station, surface props & sand patches.
-- [x] PitWalls across all 5 zones (Y = 2 to -600 studs) upgraded with solid zone colors and 3D bumpy studs.
-- [x] Unique environment props active in all 5 depth zones (Corals, Giant Kelp, Sunken Galleon, Smoker Vents, Leviathan Ribcage & Horned Skull).
-- [x] Both world chests (Barnacled Treasure Chest and Floating PvP Loot Chest) rebuilt with zero Z-fighting.
-- [x] All 12 collectible loot models integrated in `ReplicatedStorage.LootModels` and verified on spawn nodes.
-- [x] All 5 diving tools upgraded with custom 3D Meshy meshes in `ReplicatedStorage.Tools`, hand-scaled, and welded.
-- [x] Client review exhibition gallery (`Workspace.Client_MilestoneA_Showcase`) reviewed and approved by Lemar Bentley.
-
-### Phase 2 Milestone B Acceptance Criteria (CURRENT FOCUS)
-- [x] Complete UI/UX redesign across all screens matching *Grow a Garden* clean style (rounded corners, smooth spring animations, clean typography).
-- [x] 2D Studded UI style implemented for HUD pills, Oxygen meter, Action Bar, and Shop/Prestige/Store modals.
-- [x] Custom 2D icons created and integrated for all 5 gear categories in the Gear Shop modal.
-- [ ] Responsive UI layout tested on PC, Mobile, Tablet, and Console gamepad navigation.
-- [ ] Underwater lighting and water color transitions tuned per zone (Shallow Reef cyan ➔ Kelp emerald ➔ Shipwreck navy ➔ Abyss violet ➔ Cursed Deep magma).
-- [ ] Environmental particle VFX active (bubble trails, silt drift, volcanic embers, eel sparks, pressure vignette).
-- [ ] Complete sound design polish (zone-based BGM, muffled underwater audio, collection chimes, cash register SFX, creature audio, UI clicks).
-
-### Phase 2 Milestone C Acceptance Criteria (UPCOMING)
-- [ ] Live numeric Robux Game Pass IDs (Deep Diver 199, Treasure Hunter 499, Leviathan Pass 999) and Dev Product IDs integrated in `MonetizationConfig.luau` with `TEST_MODE = false`.
-- [ ] Server receipt validation active with MarketplaceService.
-- [ ] 2-second automatic popup triggers verified for Emergency Oxygen (critical O2) and Revive Token (PvP defeat).
-- [ ] Performance audit: solid 60 FPS verified with 20–30 CCU on PC, Mobile, and Console.
-- [ ] Full bug sweep, memory audit, clean code handover to client.
+### Milestone C: Live Monetization & Public Launch ($198 AUD) — **[PENDING]**
+- [ ] Live Robux product IDs integrated for all Game Passes and Developer Products.
+- [ ] Automatic prompt verification (Emergency Oxygen & Revive Token).
+- [ ] Full game polish, 20–30 player optimization, and launch-readiness checklist.
+- [ ] Public release preparation and handover.

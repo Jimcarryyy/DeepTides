@@ -111,3 +111,28 @@ All notable changes to the Deep Tides project are documented in this file.
 - 1-time purchase locking and visual `PURCHASED` badges for the 3 Game Passes and the Starter Pack.
 
 ---
+
+## [0.5.2] - 2026-10-27
+### Added
+- **5-Zone Dynamic Sound Engine:** Integrated custom ElevenLabs ambient loops for Zones 1–5 in `SoundController.client.luau` with boosted volumes (1.45–1.70), gapless looping, and 2-second cross-fading.
+- **Surface Audio Isolation:** Complete muting and pausing of surface BGM when submerged, restoring cleanly on surfacing.
+- **Creature 3D Defeat Audio:** Added unique 3D spatial defeat sounds for Jellyfish, Electric Eel, Hammerhead Shark, Giant Octopus, and The Leviathan in `CreatureServer.server.luau`.
+- **Damage Audio System:** Wired `DamageSFX.CreatureAttackImpact` for monster strikes and `DamageSFX.PvPWeaponHit` for player combat in `ServerInit.server.luau`.
+- **Zone Switcher Sound:** Integrated `ZoneSwitcher` audio into `UIController.client.luau` triggering alongside depth toast notifications.
+- **Harpoon Ranged Combat Pipeline:**
+  - 3D `HarpoonBullet` model projectile flight (85 studs/s) with cavitation bubble wake.
+  - Creature impale effect: harpoon spears weld and stick into the target's body for 3.5s before dissolving.
+  - Custom UI crosshairs: `Aim reticle` (98984117406248), dynamic red `Target lock` (94965985205021), and damage `Hit marker` (85125072168334).
+  - Automatic aim activation underwater with manual `Alt` lock/unlock toggle.
+  - Over-the-shoulder camera offset (`Vector3.new(2.6, 0.5, -0.8)`) with smooth 0.35s glide and free natural swimming.
+  - Smooth 0.22s hydrodynamic swivel and subtle camera recoil on fire.
+  - Server-side true ray-line hit detection up to 65 studs in `CreatureServer.server.luau`.
+- **2-Hit Melee Combo System:** Slashes alternate smoothly (`Slash1` ➔ 0.42s ➔ `Slash2`), followed by an enforced 1.35s recovery cooldown.
+- **Natural Creature Death Sequence:** Replaced instant deletion with a 2.2s belly-up sinking/floating fade-out animation.
+
+### Changed
+- **Underwater Visibility:** Boosted brightness and extended `FogEnd` in Zones 3–5 (Shipwreck: 125 studs, Abyss: 95 studs, Magma: 85 studs).
+- **VFX Cleanliness:** Removed colored camera silt/embers from `UnderwaterVFXController.client.luau` and removed dodge wake particles.
+- **Rig Standardization:** Standardized project Avatar Type to True R6.
+- **Tool Grip Pipeline:** Replaced temporary constraints with permanent native `Tool.Grip` serialization.
+- **UI Toast Polish:** Silenced redundant cash register sound on creature kill toast notifications while preserving visual popups.

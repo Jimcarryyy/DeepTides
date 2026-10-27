@@ -59,3 +59,33 @@
 ### ADR 015: Tool Class Exclusion in Display Showcases
 - **Decision:** Never use the `Tool` class inside visual world exhibitions or showcase galleries. Cloned display weapons must use plain `Model`s containing `MeshPart`s with `CanTouch = false`.
 - **Why:** Roblox's default character controller auto-equips unanchored or touched `Tool` instances. If the tool handle is anchored in a display, the player's arm welds to the anchored part, permanently freezing the character in place.
+
+### ADR 016: True R6 Avatar Standardization
+* **Context:** Initial animation testing encountered rig mismatches between R15 and R6.
+* **Decision:** Formally standardized the game's Avatar Type to True R6 in project settings.
+* **Why:** Classic R6 geometry provides responsive, lightweight movement that matches top-performing Roblox simulators (*Steal an Egg*, *Grow a Garden*) while eliminating multi-joint deformation lag in water.
+
+### ADR 017: Native Tool.Grip Serialization
+* **Context:** Imported tool models were oriented vertically, cutting through player shoulders.
+* **Decision:** Used Roblox's native `Tool.Grip` CFrame property serialized directly on tool assets rather than runtime weld constraints or scripts.
+* **Why:** `Tool.Grip` is natively supported by the Roblox engine, persists permanently via Argon sync, and incurs zero runtime script or physics overhead.
+
+### ADR 018: True Ray-Line Ranged Hit Detection
+* **Context:** Loose dot-product checks resulted in an auto-targeting cone that felt like an aimbot.
+* **Decision:** Implemented perpendicular ray-line intersection math on the server verifying the spear path passes within the creature's physical body radius.
+* **Why:** Rewards skill-based speargun aiming and prevents players from hitting targets outside their crosshair.
+
+### ADR 019: Projectile Impale Sticking Effect
+* **Context:** Ranged harpoon bolts previously vanished instantly on collision like laser beams.
+* **Decision:** When connecting with a creature, the spear stops its velocity and welds directly to the creature's root part for 3.5 seconds before dissolving.
+* **Why:** Dramatically enhances visual feedback, allowing players to see their spears embedded in swimming sea creatures.
+
+### ADR 020: Natural Sinking Creature Death Sequences
+* **Context:** Defeated sea creatures were disappearing instantly on reaching 0 HP.
+* **Decision:** Implemented a 2.2-second belly-up roll, gentle sinking drift, and gradual transparency fade.
+* **Why:** Replaces jarring object deletion with an authentic marine death animation while keeping performance lightweight.
+
+### ADR 021: High-Volume Ambient Mastering (1.45–1.70)
+* **Context:** Low-frequency underwater ambient audio was inaudible on mobile and laptop speakers.
+* **Decision:** Mastered zone ambient target volumes between 1.45 and 1.70 in `SoundController.client.luau`.
+* **Why:** Overcomes hardware speaker limitations while maintaining headroom for crisp, punchy combat and UI sound effects.

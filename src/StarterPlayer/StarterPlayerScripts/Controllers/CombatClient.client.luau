@@ -1,6 +1,6 @@
 --!strict
 -- CombatClient.client.luau
--- R6 Combat Controller: Fixed Dodge Dash Velocity (DASH_SPEED = 65), Strict Multi-Layer Cooldown Lock, Instance-Linked Shield Lifecycle, Tool Equip [1] Key, Smooth Aim Glide & Harpoon Flight
+-- R6 Combat Controller: Fixed Dodge Dash Velocity (DASH_SPEED = 65), Strict Multi-Layer Cooldown Lock, Instance-Linked Shield Lifecycle, Clickable CombatActionBar (Desktop & Mobile Touch), Smooth Aim Glide & Harpoon Flight
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -150,7 +150,7 @@ local specialCooldownUntil = 0
 local dodgeCooldownUntil = 0
 local SPECIAL_COOLDOWN = 15.0
 local DODGE_COOLDOWN = 1.4
-local DASH_SPEED = 65 -- Restored: Defines linear dodge impulse velocity
+local DASH_SPEED = 65
 
 local function getActionSlot(slotName: string): Frame?
 	local hud = playerGui:FindFirstChild("MainHUD")
@@ -218,22 +218,16 @@ local function startCooldownMask(slotName: string, duration: number, showCountdo
 	activeCooldownTrackers[slotName] = { Tween = tween, Thread = cdThread }
 end
 
--- Pure Silent Multi-Layer Cooldown Verification for Q Ability
 local function isAbilityOnCooldown(): boolean
-	-- 1. High-precision hardware clock check
 	if os.clock() < specialCooldownUntil then return true end
-
-	-- 2. Active animation thread/tween check
 	if activeCooldownTrackers["Slot_Ability"] ~= nil then return true end
 
-	-- 3. GUI visual overlay verification (if dark mask is visible, action is blocked)
 	local slot = getActionSlot("Slot_Ability")
 	if slot then
 		local overlay = slot:FindFirstChild("CooldownOverlay") :: Frame?
 		if overlay and overlay.Visible then return true end
 	end
 
-	-- 4. Active shield presence check on character
 	local char = LocalPlayer.Character
 	if char and char:FindFirstChild("SuitAbilityShield") then return true end
 
@@ -298,7 +292,6 @@ local activeShieldVFX: Instance? = nil
 
 local triggerAttack: () -> ()
 
--- Instance-Linked VFX Lifecycle: Bound directly to SuitAbilityShield
 local function hookShieldInstance(character: Model, shieldPart: BasePart)
 	if activeShieldVFX then
 		activeShieldVFX:Destroy()
@@ -311,7 +304,6 @@ local function hookShieldInstance(character: Model, shieldPart: BasePart)
 	local vfxClone = ironSkinTemplate:Clone()
 	activeShieldVFX = vfxClone
 
-	-- DYNAMIC COLOR MATCH: Automatically copies the exact Color3 from the forcefield sphere
 	local targetColorSeq = ColorSequence.new(shieldPart.Color)
 	for _, emitter in ipairs(vfxClone:GetDescendants()) do
 		if emitter:IsA("ParticleEmitter") then
@@ -335,7 +327,6 @@ local function hookShieldInstance(character: Model, shieldPart: BasePart)
 		vfxClone.Parent = character
 	end
 
-	-- SYNCHRONIZED DESTRUCTION: When the server destroys SuitAbilityShield, instantly clean up particles
 	local ancestryConn: RBXScriptConnection? = nil
 	local function cleanup()
 		if ancestryConn then
@@ -389,7 +380,6 @@ local function loadTracks(character: Model)
 		if child:IsA("Tool") then hookTool(child) end
 	end
 
-	-- Check if a shield is already active upon character load
 	local existingShield = character:FindFirstChild("SuitAbilityShield")
 	if existingShield and existingShield:IsA("BasePart") then
 		hookShieldInstance(character, existingShield)
@@ -799,7 +789,6 @@ end
 -- 9. CLEAN UNDERWATER DODGE & STRICT MULTI-LAYER ABILITY LOCK
 -- ===================================================================
 local function triggerDodge()
-	-- Timestamp lockout for dodge
 	if os.clock() < dodgeCooldownUntil then return end
 
 	local char = LocalPlayer.Character
@@ -833,9 +822,7 @@ local function triggerDodge()
 	task.delay(0.25, function() lv:Destroy() end)
 end
 
--- Ability Trigger: Pure Silent Lockout if Cooldown Active
 local function triggerSpecial()
-	-- Multi-layer lock: exits silently if timer, mask, or shield is active
 	if isAbilityOnCooldown() then return end
 
 	local char = LocalPlayer.Character
@@ -845,10 +832,7 @@ local function triggerSpecial()
 	if not hrp or not hum or hum.Health <= 0 then return end
 	if hrp.Position.Y > ZoneConfig.WATER_SURFACE_Y then return end
 
-	-- Lock timestamp immediately
 	specialCooldownUntil = os.clock() + SPECIAL_COOLDOWN
-
-	-- Start visual mask and countdown
 	startCooldownMask("Slot_Ability", SPECIAL_COOLDOWN, true)
 
 	playIronSkinSFX()
@@ -856,10 +840,77 @@ local function triggerSpecial()
 end
 
 -- ===================================================================
--- 10. INPUT BINDINGS
+-- 10. INPUT & ACTION BAR BINDINGS (DESKTOP & MOBILE TOUCH)
 -- ===================================================================
+-- Universal click & touch binder for Action Bar slots
+local function hookSlotClick(slotInstance: Instance?, onClick: () -> ())
+	if not slotInstance then return end
+
+	local function bind(guiObj: GuiObject)
+		guiObj.Active = true
+		if guiObj:IsA("GuiButton") then
+			guiObj.Activated:Connect(onClick)
+		else
+			guiObj.InputBegan:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+					onClick()
+				end
+			end)
+		end
+	end
+
+	if slotInstance:IsA("GuiObject") then
+		bind(slotInstance)
+	end
+
+	for _, child in ipairs(slotInstance:GetDescendants()) do
+		if child:IsA("GuiObject") then
+			bind(child)
+		end
+	end
+end
+
+-- Hook MainHUD.CombatActionBar Slots
+task.spawn(function()
+	local mainHUD = playerGui:WaitForChild("MainHUD", 10) :: ScreenGui?
+	if not mainHUD then return end
+	local actionBar = mainHUD:WaitForChild("CombatActionBar", 10) :: Frame?
+	if not actionBar then return end
+
+	local slotAttack = actionBar:FindFirstChild("Slot_Attack")
+	local slotAbility = actionBar:FindFirstChild("Slot_Ability")
+	local slotDodge = actionBar:FindFirstChild("Slot_Dodge")
+
+	-- Slot 1: Click/Tap toggles Equip / Unequip
+	if slotAttack then
+		hookSlotClick(slotAttack, toggleToolEquipped)
+	end
+
+	-- Slot 2: Click/Tap triggers Q Suit Ability
+	if slotAbility then
+		hookSlotClick(slotAbility, triggerSpecial)
+	end
+
+	-- Slot 3: Click/Tap triggers Dodge Dash
+	if slotDodge then
+		hookSlotClick(slotDodge, triggerDodge)
+	end
+
+	-- Fallbacks for backward compatibility
+	local attackBtn = actionBar:FindFirstChild("AttackButton", true) :: TextButton?
+	if attackBtn then attackBtn.MouseButton1Click:Connect(triggerAttack) end
+
+	local dodgeBtn = actionBar:FindFirstChild("DodgeButton", true) :: TextButton?
+	if dodgeBtn then dodgeBtn.MouseButton1Click:Connect(triggerDodge) end
+
+	local specialBtn = actionBar:FindFirstChild("SpecialButton", true) :: TextButton?
+	if specialBtn then specialBtn.MouseButton1Click:Connect(triggerSpecial) end
+end)
+
+-- Keyboard & Screen Tap Bindings
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 and not gameProcessed then
+	-- Tap / Left-Click on screen to Attack (when not clicking UI)
+	if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) and not gameProcessed then
 		triggerAttack()
 		return
 	end
@@ -878,29 +929,4 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	end
 end)
 
--- UI Action Bar Bindings
-task.spawn(function()
-	local mainHUD = playerGui:WaitForChild("MainHUD", 10)
-	if not mainHUD then return end
-	local actionBar = mainHUD:FindFirstChild("CombatActionBar", true)
-	if not actionBar then return end
-
-	local slotAttack = actionBar:FindFirstChild("Slot_Attack") :: Frame?
-	if slotAttack then
-		local btn = slotAttack:FindFirstChildOfClass("TextButton") or slotAttack:FindFirstChildOfClass("ImageButton")
-		if btn then
-			btn.MouseButton1Click:Connect(toggleToolEquipped)
-		end
-	end
-
-	local attackBtn = actionBar:FindFirstChild("AttackButton", true) :: TextButton?
-	if attackBtn then attackBtn.MouseButton1Click:Connect(triggerAttack) end
-
-	local dodgeBtn = actionBar:FindFirstChild("DodgeButton", true) :: TextButton?
-	if dodgeBtn then dodgeBtn.MouseButton1Click:Connect(triggerDodge) end
-
-	local specialBtn = actionBar:FindFirstChild("SpecialButton", true) :: TextButton?
-	if specialBtn then specialBtn.MouseButton1Click:Connect(triggerSpecial) end
-end)
-
-print("[Deep Tides] CombatClient: Active with Fixed Dodge Velocity & Silent Cooldown Lock.")
+print("[Deep Tides] CombatClient: Active with Clickable Action Bar (Slots 1, 2, 3) & Mobile Touch.")

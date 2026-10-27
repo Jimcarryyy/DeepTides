@@ -101,3 +101,30 @@ Each category features 5 upgrade tiers:
 - **Phase 2 Contract (Active):** $660 AUD across 3 Milestones (M-A: $198 [Approved], M-B: $264 [Active], M-C: $198 [Pending])
 - **Visual References:** *Steal an Egg* (assets, creatures, proportions) & *Grow a Garden* (UI cleanliness, environment quality).
 - **Strict Scope Exclusion:** Thumbnail artwork is 100% excluded.
+
+## Phase 2 Commercial Systems Overview
+
+### R6 Combat & Weapon Mechanics
+* **Melee Tools (Tier 1 Knife, Tier 2 Spear, Tier 4 Axe, Tier 5 Trident):**
+  * Alternating 2-hit combo: `Slash1` (0.04s) connects into `Slash2` (0.42s).
+  * Post-combo recovery: 1.35-second cooldown after `Slash2` before the combo can be restarted.
+  * Melee hit range: 10 studs client / 14–16 studs server validation.
+  * Audio: `Knife&Axe` (Tier 1 & 4), `Spear&Trident` (Tier 2 & 5), and `MonsterHitImpact` on strike.
+* **Ranged Harpoon Gun (Tier 3):**
+  * Auto-activates over-the-shoulder Aim Mode (`CameraOffset = Vector3.new(2.6, 0.5, -0.8)`) with FOV 60 when submerged.
+  * Pressing `Alt` toggles aim lock on/off; natural swimming (`AutoRotate = true`) is maintained.
+  * UI Crosshair Suite: Center `Aim reticle` (98984117406248), dynamic red `Target lock` (94965985205021) on creature hover, and damage `Hit marker` (85125072168334) 0.15s flash.
+  * Projectile: 3D `HarpoonBullet` model launched from muzzle at 85 studs/s with cavitation bubble wake.
+  * Impale Effect: Embeds and welds directly into creature body for 3.5s before dissolving.
+  * Smooth 0.22s hydrodynamic swivel and subtle camera recoil on fire.
+  * Server validation: True ray-line line-of-sight check up to 65 studs.
+  * Cooldown: 1.25 seconds reload time.
+* **Underwater Restraint:** All combat actions, slashes, harpoon shots, and dashes are strictly disabled on the surface island (Y > 0.5).
+
+### Sound & Atmosphere Architecture
+* **5-Zone Ambiance:** Custom ElevenLabs ambient loops for Zones 1–5 running continuously at Volume 0 with ~2-second volume cross-fading based on camera depth.
+* **Master Volumes:** Zone 1 (1.45), Zone 2 (1.50), Zone 3 (1.55), Zone 4 (1.60), Zone 5 (1.70) for full audibility on mobile/laptop speakers.
+* **Surface BGM:** Muted to 0.0 and paused while submerged; smoothly restored upon surfacing.
+* **Spatial Audio:** 5 unique creature defeat sounds and `PvPWeaponHit` played in 3D audio at world coordinates.
+* **Zone Transitions:** `ZoneSwitcher` audio bound to depth transition toast notifications.
+* **Creature Defeat:** 2.2-second belly-up roll, gentle sinking drift, and gradual transparency fade.

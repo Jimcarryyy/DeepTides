@@ -191,7 +191,7 @@ function PlayerDataManager.SyncClient(player: Player)
 	})
 end
 
--- CLEAN TEXT-ONLY PRESTIGE OVERHEAD DISPLAY
+-- Safely cleans up any legacy text badges (No more programmatic yellow text)
 function PlayerDataManager.UpdatePrestigeBadge(player: Player)
 	local char = player.Character
 	if not char then return end
@@ -199,36 +199,9 @@ function PlayerDataManager.UpdatePrestigeBadge(player: Player)
 	if not head then return end
 
 	local oldBadge = head:FindFirstChild("PrestigeBadge")
-	if oldBadge then oldBadge:Destroy() end
-
-	local profile = PlayerProfiles[player]
-	if not profile or (profile.Data.PrestigeLevel or 0) <= 0 then return end
-
-	local level = profile.Data.PrestigeLevel
-	local romans = { "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X" }
-	local roman = romans[level] or tostring(level)
-
-	local bboard = Instance.new("BillboardGui")
-	bboard.Name = "PrestigeBadge"
-	bboard.Size = UDim2.new(0, 120, 0, 20)
-	bboard.StudsOffset = Vector3.new(0, 3.2, 0)
-	bboard.AlwaysOnTop = true
-	bboard.Parent = head
-
-	local badgeLabel = Instance.new("TextLabel")
-	badgeLabel.Size = UDim2.new(1, 0, 1, 0)
-	badgeLabel.BackgroundTransparency = 1
-	badgeLabel.BorderSizePixel = 0
-	badgeLabel.Text = string.format("PRESTIGE %s", roman)
-	badgeLabel.TextColor3 = Color3.fromRGB(255, 215, 60)
-	badgeLabel.Font = Enum.Font.FredokaOne
-	badgeLabel.TextSize = 14
-	badgeLabel.Parent = bboard
-
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(15, 15, 20)
-	stroke.Thickness = 1.5
-	stroke.Parent = badgeLabel
+	if oldBadge then
+		oldBadge:Destroy()
+	end
 end
 
 local function applyGearBuffs(player: Player, char: Model)
@@ -308,7 +281,7 @@ function PlayerDataManager.Prestige(player: Player): (boolean, string?)
 
 	local currentPrestige = profile.Data.PrestigeLevel or 0
 	if currentPrestige >= MAX_PRESTIGE then
-		NotifyClient:FireClient(player, "Max Prestige reached!", "Warning", "★")
+		NotifyClient:FireClient(player, "Max Prestige reached! (Rank X)", "Warning", "★")
 		return false, "Max prestige reached!"
 	end
 

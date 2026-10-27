@@ -112,3 +112,54 @@ Anti-Dupe Safeguard: Dropped bags are a live race: using a Revive Token despawns
 - `ReplicatedStorage.CreatureModels`: Custom 3D models for `Jellyfish`, `ElectricEel`, `HammerheadShark`, `GiantOctopus`, and `TheLeviathan`.
 - `ReplicatedStorage.Tools`: `DivingTool_1` to `DivingTool_5` with custom 3D Meshy meshes scaled to hand size and welded to `Handle`.
 - `ReplicatedStorage.LootModels`: 12 official collectible drops mapped to `LootConfig.Id` (`seashell`, `starfish`, `rusty_coin`, `small_chest`, `glowing_kelp`, `pearl_oyster`, `ancient_amphora`, `emerald_geode`, `galleon_gold`, `pirate_cutlass`, `ship_chronometer`, `cursed_skull_relic`) plus `BarnacledChest` and `FloatingPvPChest`.
+
+
+## Phase 2 Audio & Combat Architecture Additions
+
+### Sound Hierarchy (`SoundService`)
+SoundService/
+├── BGM_RelaxingOcean (Surface Island BGM, muted underwater)
+├── BubblesSFX (Continuous ambient diving bubbles)
+├── UnderWaterDodge (Dodge dash water whoosh)
+├── ZoneSwitcher (Depth boundary discovery ping)
+├── MonsterHitImpact (Weapon damage impact on creatures)
+├── ToolsSFX/
+│ ├── Knife&Axe (Tier 1 & 4 melee swing)
+│ ├── Spear&Trident (Tier 2 & 5 melee thrust/slash)
+│ └── Harpoon (Tier 3 pneumatic firing sound)
+├── CreatureDefeatSFX/
+│ ├── Jellyfish (Zone 1 defeat sound)
+│ ├── ElectricEel (Zone 2 defeat sound)
+│ ├── HammerheadShark (Zone 3 defeat sound)
+│ ├── GiantOctopus (Zone 4 defeat sound)
+│ └── TheLeviathan (Zone 5 boss defeat roar)
+├── DamageSFX/
+│ ├── CreatureAttackImpact (Creature bite/shock on player)
+│ └── PvPWeaponHit (Weapon strike on player)
+└── ZoneSFX/
+├── Zone1 (Shallow Reef ambient loop)
+├── Zone2 (Kelp Forest ambient loop)
+├── Zone3 (Sunken Shipwreck ambient loop)
+├── Zone4 (The Abyss ambient loop)
+└── Zone5 (The Cursed Deep ambient loop)
+code
+Code
+### Client Controllers (`StarterPlayerScripts/Controllers/`)
+* **`UnderwaterVFXController.client.luau`**: Real-time depth lighting and fog lerp engine across Zones 1–5, water entry splash spawner, and character swimming bubble emitter.
+* **`SoundController.client.luau`**: Ambient 5-zone audio cross-fader, surface BGM isolation, and continuous diving foley engine.
+* **`CombatClient.client.luau`**:
+  * Free natural swimming controller with over-the-shoulder Harpoon aim.
+  * ScreenGui reticle manager (`Aim reticle: 98984117406248`, `Target lock: 94965985205021`, `Hit marker: 85125072168334`).
+  * 3D projectile spawner (`HarpoonBullet`) with 85 studs/s flight and creature impale welding.
+  * 2-hit melee combo state machine with 1.35s recovery cooldown.
+  * Water boundary enforcer (disables combat and dashes on land).
+
+### Server Systems (`ServerScriptService/Core/`)
+* **`CreatureServer.server.luau`**:
+  * Server-authoritative line-of-sight ray intersection hit validation (65 studs ranged for Harpoon, 16 studs for melee).
+  * 3D spatial defeat sound trigger via `CreatureDefeatSFX`.
+  * Natural 2.2s belly-up rolling and sinking creature death sequence with fading parts.
+  * Player damage calculation with `CreatureAttackImpact` spatial audio.
+* **`ServerInit.server.luau`**:
+  * PvP combat validation supporting ranged harpoon combat (60 studs) and melee (14 studs).
+  * 3D spatial `PvPWeaponHit` sound playback on target character.
