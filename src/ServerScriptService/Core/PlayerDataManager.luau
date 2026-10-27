@@ -32,7 +32,6 @@ local PlayerProfiles: { [Player]: any } = {}
 local MAX_PRESTIGE = 10
 local PRESTIGE_COST = 50000
 
--- Sanitizes loot item tables to prevent storing Color3/userdata in DataStores
 local function sanitizeItem(item: any): { Id: string, Name: string, BaseValue: number, Rarity: string }
 	if typeof(item) ~= "table" then
 		return { Id = "unknown", Name = "Unknown Item", BaseValue = 0, Rarity = "Common" }
@@ -63,9 +62,6 @@ function PlayerDataManager.AddPearls(player: Player, amount: number)
 	PlayerDataManager.SyncClient(player)
 end
 
--- ===================================================================
--- DYNAMIC WALKSPEED / GEAR SPEED CONTROLLER (PREVENTS PERMANENT SLOWS)
--- ===================================================================
 function PlayerDataManager.GetDefaultWalkSpeed(player: Player): number
 	local profile = PlayerProfiles[player]
 	if not profile then return 16 end
@@ -84,9 +80,6 @@ function PlayerDataManager.ResetWalkSpeed(player: Player)
 	end
 end
 
--- ===================================================================
--- GEAR TIER GETTERS
--- ===================================================================
 function PlayerDataManager.GetTankTier(player: Player): number
 	local profile = PlayerProfiles[player]
 	return if profile then profile.Data.OxygenTankTier or 1 else 1
@@ -176,6 +169,9 @@ function PlayerDataManager.SyncClient(player: Player)
 	local profile = PlayerProfiles[player]
 	if not profile then return end
 
+	local isPvp = profile.Data.PvPEnabled or false
+	player:SetAttribute("PvPEnabled", isPvp)
+
 	PlayerDataUpdate:FireClient(player, {
 		Pearls = profile.Data.Pearls,
 		OxygenTankTier = profile.Data.OxygenTankTier,
@@ -186,12 +182,11 @@ function PlayerDataManager.SyncClient(player: Player)
 		BagCount = #profile.Data.LootBag,
 		BagCapacity = PlayerDataManager.GetBagCapacity(player),
 		PrestigeLevel = profile.Data.PrestigeLevel or 0,
-		PvPEnabled = profile.Data.PvPEnabled or false,
+		PvPEnabled = isPvp,
 		OwnedPasses = profile.Data.OwnedPasses or {},
 	})
 end
 
--- Safely cleans up any legacy text badges (No more programmatic yellow text)
 function PlayerDataManager.UpdatePrestigeBadge(player: Player)
 	local char = player.Character
 	if not char then return end
@@ -330,7 +325,6 @@ function PlayerDataManager.OnPlayerAdded(player: Player)
 		end)
 
 		if player:IsDescendantOf(Players) then
-			-- Strip any pre-existing Color3/userdata items from database
 			if profile.Data.LootBag and typeof(profile.Data.LootBag) == "table" then
 				for i, item in ipairs(profile.Data.LootBag) do
 					profile.Data.LootBag[i] = sanitizeItem(item)
@@ -338,7 +332,13 @@ function PlayerDataManager.OnPlayerAdded(player: Player)
 			end
 
 			PlayerProfiles[player] = profile
-			print(string.format("[PlayerDataManager] Loaded profile for %s (Pearls: %d, Prestige: %d)", player.Name, profile.Data.Pearls, profile.Data.PrestigeLevel or 0))
+			
+			-- Server-authoritative player attribute set immediately on join
+			player:SetAttribute("PvPEnabled", profile.Data.PvPEnabled or false)
+
+			print(string.format("[PlayerDataManager] Loaded profile for %s (Pearls: %d, Prestige: %d, PvP: %s)", 
+				player.Name, profile.Data.Pearls, profile.Data.PrestigeLevel or 0, tostring(profile.Data.PvPEnabled or false)
+			))
 
 			player.CharacterAdded:Connect(function(char)
 				applyGearBuffs(player, char)

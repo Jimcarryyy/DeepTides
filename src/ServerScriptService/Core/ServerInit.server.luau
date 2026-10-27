@@ -54,7 +54,6 @@ local NotifyClient = remotesFolder:WaitForChild("NotifyClient") :: RemoteEvent
 
 local damageSfxFolder = SoundService:WaitForChild("DamageSFX", 10) :: Folder?
 
--- Roman Numerals for Prestige Ranks I - X
 local PRESTIGE_ROMAN = {
 	[1] = "I",
 	[2] = "II",
@@ -68,7 +67,6 @@ local PRESTIGE_ROMAN = {
 	[10] = "X",
 }
 
--- Locate OverheadTag template reliably
 local function getOverheadTagTemplate(): BillboardGui?
 	local tag = ReplicatedStorage:WaitForChild("OverheadTag", 10) :: BillboardGui?
 	if tag and tag:IsA("BillboardGui") then return tag end
@@ -79,14 +77,12 @@ local function getOverheadTagTemplate(): BillboardGui?
 	return nil
 end
 
--- Spawns and configures the custom Prestige Overhead Tag on the player's head
 local function updatePrestigeOverhead(player: Player)
 	local char = player.Character
 	if not char then return end
 	local head = char:FindFirstChild("Head") :: BasePart?
 	if not head then return end
 
-	-- Clean up legacy text badges and previous OverheadTags
 	for _, child in ipairs(head:GetChildren()) do
 		if child:IsA("BillboardGui") then
 			child:Destroy()
@@ -96,7 +92,6 @@ local function updatePrestigeOverhead(player: Player)
 	local profile = PlayerDataManager.GetProfile(player)
 	local prestigeLevel = if profile and profile.Data.PrestigeLevel then profile.Data.PrestigeLevel else 0
 
-	-- Only show the Prestige tag if the player has prestiged (Rank 1+)
 	if prestigeLevel <= 0 then return end
 
 	local template = getOverheadTagTemplate()
@@ -109,7 +104,7 @@ local function updatePrestigeOverhead(player: Player)
 	tag.Name = "OverheadTag"
 	tag.Adornee = head
 	tag.AlwaysOnTop = true
-	tag.Enabled = true -- Enforces visibility even if template is set to Enabled = false
+	tag.Enabled = true
 
 	if tag.StudsOffset == Vector3.zero then
 		tag.StudsOffset = Vector3.new(0, 2.5, 0)
@@ -122,17 +117,12 @@ local function updatePrestigeOverhead(player: Player)
 
 	local roman = PRESTIGE_ROMAN[prestigeLevel] or tostring(prestigeLevel)
 
-	if titleLabel then
-		titleLabel.Text = "PRESTIGE"
-	end
-	if rankLabel then
-		rankLabel.Text = roman
-	end
+	if titleLabel then titleLabel.Text = "PRESTIGE" end
+	if rankLabel then rankLabel.Text = roman end
 
 	tag.Parent = head
 end
 
--- Spawns a physical loot bag on the seabed when a player dies in PvP mode
 local function spawnDroppedLootBag(position: Vector3, bagItems: { any }, victim: Player)
 	local activeLoot = Workspace:FindFirstChild("ActiveLoot")
 	if not activeLoot then
@@ -165,8 +155,9 @@ local function spawnDroppedLootBag(position: Vector3, bagItems: { any }, victim:
 
 	prompt.Triggered:Connect(function(looter: Player)
 		local looterChar = looter.Character
-		if not looterChar or looterChar:GetAttribute("PvPEnabled") ~= true then
-			NotifyClient:FireClient(looter, "PVP REQUIRED TO STEAL", "Warning", "⚔️")
+		local looterPvP = (looter:GetAttribute("PvPEnabled") == true) or (looterChar and looterChar:GetAttribute("PvPEnabled") == true)
+		if not looterPvP then
+			NotifyClient:FireClient(looter, "PVP REQUIRED TO STEAL", "Warning", "🛡️")
 			return
 		end
 
@@ -181,7 +172,7 @@ local function spawnDroppedLootBag(position: Vector3, bagItems: { any }, victim:
 		if victim:IsDescendantOf(Players) then
 			victim:SetAttribute("LastDroppedLoot", nil)
 			HideRevivePrompt:FireClient(victim)
-			NotifyClient:FireClient(victim, "LOOT STOLEN!", string.format("Your dropped bag was claimed by %s!", looter.Name), "Warning", "⚔️")
+			NotifyClient:FireClient(victim, "LOOT STOLEN!", string.format("Your dropped bag was claimed by %s!", looter.Name), "Warning", "🏴‍☠️")
 		end
 
 		NotifyClient:FireClient(looter, string.format("Stole %d items from %s!", stolenCount, victim.Name), "Success", "🎒")
@@ -199,14 +190,12 @@ end
 
 local function handleCharacterAdded(player: Player, char: Model)
 	local profile = PlayerDataManager.GetProfile(player)
+	local isPvp = if profile and profile.Data.PvPEnabled then true else false
 
-	if profile and profile.Data.PvPEnabled then
-		char:SetAttribute("PvPEnabled", true)
-	else
-		char:SetAttribute("PvPEnabled", false)
-	end
+	-- Keep Player & Character attributes in sync
+	player:SetAttribute("PvPEnabled", isPvp)
+	char:SetAttribute("PvPEnabled", isPvp)
 
-	-- Apply custom Prestige Overhead Tag and clear legacy text
 	task.spawn(function()
 		updatePrestigeOverhead(player)
 		task.wait(0.6)
@@ -216,7 +205,7 @@ local function handleCharacterAdded(player: Player, char: Model)
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	humanoid.Died:Connect(function()
 		local activeProfile = PlayerDataManager.GetProfile(player)
-		local inPvP = (activeProfile and activeProfile.Data.PvPEnabled == true) or (char:GetAttribute("PvPEnabled") == true)
+		local inPvP = (activeProfile and activeProfile.Data.PvPEnabled == true) or (player:GetAttribute("PvPEnabled") == true)
 		local currentBag = PlayerDataManager.GetBag(player)
 
 		if inPvP then
@@ -275,26 +264,35 @@ RequestPrestige.OnServerEvent:Connect(function(player: Player)
 end)
 
 -- ===================================================================
--- 3. PVP OPT-IN TOGGLE (ATTRIBUTE ONLY - NO HARDCODED BADGE)
+-- 3. PVP OPT-IN TOGGLE (SERVER SOURCE OF TRUTH)
 -- ===================================================================
 local TogglePvP = remotesFolder:WaitForChild("TogglePvP") :: RemoteEvent
 
-TogglePvP.OnServerEvent:Connect(function(player: Player)
+local function setPlayerPvPState(player: Player, enabled: boolean)
 	local profile = PlayerDataManager.GetProfile(player)
 	if not profile then return end
 
-	profile.Data.PvPEnabled = not (profile.Data.PvPEnabled or false)
+	profile.Data.PvPEnabled = enabled
+	player:SetAttribute("PvPEnabled", enabled)
+
 	local char = player.Character
 	if char then
-		char:SetAttribute("PvPEnabled", profile.Data.PvPEnabled)
+		char:SetAttribute("PvPEnabled", enabled)
 	end
+
 	PlayerDataManager.SyncClient(player)
 
-	if profile.Data.PvPEnabled then
-		NotifyClient:FireClient(player, "PVP ENABLED! (High Risk: Players can steal your bag on ascent)", "Warning", "⚔️")
+	-- Note: Icon uses "🏴‍☠️" and "🛡️" so client never mistakes it for a creature kill toast
+	if enabled then
+		NotifyClient:FireClient(player, "PVP ENABLED! (High Risk: Players can steal your bag on ascent)", "Warning", "🏴‍☠️")
 	else
 		NotifyClient:FireClient(player, "PvP Disabled. Safe diving mode active.", "Info", "🛡️")
 	end
+end
+
+TogglePvP.OnServerEvent:Connect(function(player: Player)
+	local currentPvp = player:GetAttribute("PvPEnabled") == true
+	setPlayerPvPState(player, not currentPvp)
 end)
 
 local function hookPvPStation()
@@ -304,23 +302,10 @@ local function hookPvPStation()
 		local prompt = pvpStation.PrimaryPart:WaitForChild("PvPPrompt", 3) :: ProximityPrompt?
 		if prompt then
 			prompt.Triggered:Connect(function(player: Player)
-				local profile = PlayerDataManager.GetProfile(player)
-				if profile then
-					profile.Data.PvPEnabled = not (profile.Data.PvPEnabled or false)
-					local char = player.Character
-					if char then
-						char:SetAttribute("PvPEnabled", profile.Data.PvPEnabled)
-					end
-					PlayerDataManager.SyncClient(player)
-
-					if profile.Data.PvPEnabled then
-						NotifyClient:FireClient(player, "PVP ENABLED! (Can attack and be attacked by other PvP divers)", "Warning", "⚔️")
-						prompt.ObjectText = "PvP: [ENABLED]"
-					else
-						NotifyClient:FireClient(player, "PvP Disabled. Peaceful diving active.", "Info", "🛡️")
-						prompt.ObjectText = "PvP: [DISABLED]"
-					end
-				end
+				local currentPvp = player:GetAttribute("PvPEnabled") == true
+				local nextState = not currentPvp
+				setPlayerPvPState(player, nextState)
+				prompt.ObjectText = if nextState then "PvP: [ENABLED]" else "PvP: [DISABLED]"
 			end)
 		end
 	end
@@ -340,8 +325,8 @@ AttackRequest.OnServerEvent:Connect(function(attacker: Player, clientAimDir: any
 	local attackerHum = attackerChar:FindFirstChildOfClass("Humanoid")
 	if not attackerHRP or not attackerHum or attackerHum.Health <= 0 then return end
 
-	local attackerProfile = PlayerDataManager.GetProfile(attacker)
-	if not attackerProfile or not attackerProfile.Data.PvPEnabled then return end
+	local attackerPvP = attacker:GetAttribute("PvPEnabled") == true
+	if not attackerPvP then return end
 
 	local toolTier = PlayerDataManager.GetToolTier(attacker)
 	local toolConfig = GearConfig.DivingTools[toolTier] or GearConfig.DivingTools[1]
@@ -361,7 +346,9 @@ AttackRequest.OnServerEvent:Connect(function(attacker: Player, clientAimDir: any
 	for _, target in ipairs(Players:GetPlayers()) do
 		if target ~= attacker then
 			local targetChar = target.Character
-			if targetChar and targetChar:GetAttribute("PvPEnabled") == true then
+			local targetPvP = target:GetAttribute("PvPEnabled") == true
+
+			if targetChar and targetPvP then
 				local targetHRP = targetChar:FindFirstChild("HumanoidRootPart") :: BasePart?
 				local targetHum = targetChar:FindFirstChildOfClass("Humanoid")
 
@@ -386,9 +373,6 @@ AttackRequest.OnServerEvent:Connect(function(attacker: Player, clientAimDir: any
 						local shieldReduction = targetChar:GetAttribute("ShieldReduction")
 						if typeof(shieldReduction) == "number" and shieldReduction > 0 then
 							finalDmg = math.ceil(baseDmg * (1 - shieldReduction))
-							NotifyClient:FireClient(target, string.format("Shield Blocked Hit! Took %d dmg from %s", finalDmg, attacker.Name), "Success", "🛡️")
-						else
-							NotifyClient:FireClient(target, string.format("Attacked by %s! (-%d HP)", attacker.Name, finalDmg), "Warning", "⚔️")
 						end
 
 						if damageSfxFolder and targetHRP then
@@ -406,7 +390,6 @@ AttackRequest.OnServerEvent:Connect(function(attacker: Player, clientAimDir: any
 						targetChar:SetAttribute("LastPvPHitTime", os.clock())
 
 						targetHum:TakeDamage(finalDmg)
-						NotifyClient:FireClient(attacker, string.format("Hit %s for %d damage!", target.Name, finalDmg), "Success", "🗡️")
 						break
 					end
 				end
@@ -537,4 +520,4 @@ AbilityRequest.OnServerEvent:Connect(function(player: Player)
 	end
 end)
 
-print("[Deep Tides] ServerInit: Custom Prestige OverheadTag wired, legacy text wiped & PvPWeaponHit active.")
+print("[Deep Tides] ServerInit: Server-authoritative Player PvPEnabled attribute active.")
