@@ -44,7 +44,7 @@ local ShowRevivePrompt = Remotes:WaitForChild("ShowRevivePrompt") :: RemoteEvent
 local HideRevivePrompt = Remotes:WaitForChild("HideRevivePrompt") :: RemoteEvent
 
 -- ===================================================================
--- UI REFERENCES (CONTAINER-AWARE RESOLUTION)
+-- UI REFERENCES
 -- ===================================================================
 local currencyFrame = (MainHUD:WaitForChild("CurrencyFrame", 3) or MainHUD) :: Instance
 local pearlsPill = (currencyFrame:FindFirstChild("PearlsPill", true) or MainHUD:FindFirstChild("PearlsPill", true)) :: Frame?
@@ -53,10 +53,6 @@ local pearlsText = pearlsPill and (pearlsPill:FindFirstChild("Value") or pearlsP
 local bagPill = (currencyFrame:FindFirstChild("BagPill", true) or MainHUD:FindFirstChild("BagPill", true)) :: Frame?
 local bagText = bagPill and (bagPill:FindFirstChild("Value") or bagPill:FindFirstChild("Value", true)) :: TextLabel?
 local bagStroke = bagPill and bagPill:FindFirstChildOfClass("UIStroke") :: UIStroke?
-
-local pvpPill = MainHUD:FindFirstChild("PvPPill", true) :: Frame?
-local pvpText = pvpPill and pvpPill:FindFirstChild("Value") :: TextLabel?
-local pvpStroke = pvpPill and pvpPill:FindFirstChildOfClass("UIStroke") :: UIStroke?
 
 local storeFrame = (MainHUD:WaitForChild("StoreFrame", 3) or MainHUD) :: Instance
 local storeButton = (storeFrame:FindFirstChild("StoreButton", true) or MainHUD:FindFirstChild("StoreButton", true)) :: TextButton?
@@ -71,6 +67,7 @@ local toast = MainHUD:WaitForChild("NotificationToast", 3) :: Frame?
 local toastMessage = toast and toast:FindFirstChild("Message") :: TextLabel?
 local toastIcon = toast and toast:FindFirstChild("Icon") :: TextLabel?
 local toastStroke = toast and toast:FindFirstChildOfClass("UIStroke") :: UIStroke?
+local toastGradient = toastMessage and (toastMessage:FindFirstChildOfClass("UIGradient") or toastMessage:FindFirstChild("TextGradient")) :: UIGradient?
 
 local autoO2 = MainHUD:WaitForChild("AutoOxygenPrompt", 3) :: Frame?
 local autoO2BuyBtn = autoO2 and autoO2:FindFirstChild("BuyButton") :: TextButton?
@@ -92,9 +89,13 @@ local storeModal = MainHUD:WaitForChild("StoreModal", 3) :: Frame?
 local storeList = storeModal and storeModal:FindFirstChild("List") :: ScrollingFrame?
 local storeCloseBtn = storeModal and (storeModal:FindFirstChild("CloseButton") or storeModal:FindFirstChild("CloseButton", true)) :: TextButton?
 
-local bossBar = MainHUD:WaitForChild("BossBarContainer", 3) :: Frame?
-local bossBarFill = bossBar and bossBar:FindFirstChild("BarBg") and bossBar.BarBg:FindFirstChild("Fill") :: Frame?
-local bossHPText = bossBar and bossBar:FindFirstChild("BarBg") and bossBar.BarBg:FindFirstChild("HPText") :: TextLabel?
+-- Boss Bar Container
+local bossBar = MainHUD:FindFirstChild("BossBarContainer", true) :: Frame?
+if bossBar then
+	bossBar.AnchorPoint = Vector2.new(0.5, 0)
+end
+local bossBarFill = bossBar and (bossBar:FindFirstChild("Fill", true) or bossBar:FindFirstChild("BarFill", true)) :: Frame?
+local bossHPText = bossBar and (bossBar:FindFirstChild("HPText", true) or bossBar:FindFirstChild("TextLabel", true)) :: TextLabel?
 
 local actionBar = MainHUD:WaitForChild("CombatActionBar", 3) :: Frame?
 local slotAttack = actionBar and actionBar:FindFirstChild("Slot_Attack") :: Frame?
@@ -120,6 +121,93 @@ local function playUIClick()
 		if clickSound then clickSound:Play() end
 	end
 end
+
+-- ===================================================================
+-- PVP INDICATOR CONTROLLER (WIRED TO EXACT SPECIFICATIONS)
+-- ===================================================================
+local OFF_STATE_GRADIENT = ColorSequence.new(Color3.fromRGB(120, 235, 160), Color3.fromRGB(30, 165, 115))
+local OFF_PLATE_GRADIENT = ColorSequence.new(Color3.fromRGB(240, 246, 255), Color3.fromRGB(150, 168, 196))
+local OFF_LAMP_COLOR = Color3.fromRGB(70, 255, 130)
+
+local ON_STATE_GRADIENT = ColorSequence.new(Color3.fromRGB(255, 120, 95), Color3.fromRGB(205, 35, 55))
+local ON_PLATE_GRADIENT = ColorSequence.new(Color3.fromRGB(255, 238, 120), Color3.fromRGB(255, 165, 25))
+local ON_LAMP_COLOR = Color3.fromRGB(255, 70, 70)
+
+local function getPvpIndicatorFrame(): Frame?
+	local hud = PlayerGui:FindFirstChild("MainHUD") or MainHUD
+	if not hud then return nil end
+	return hud:FindFirstChild("PvpIndicator", true) :: Frame?
+end
+
+local function applyPvpVisualState(indicator: Frame, isPvpOn: boolean, animate: boolean?)
+	local stateGrad = indicator:FindFirstChild("StateGradient") :: UIGradient?
+	local lamp = indicator:FindFirstChild("Lamp") :: Frame?
+	local statusPlate = indicator:FindFirstChild("StatusPlate") :: Frame?
+	local statusGrad = statusPlate and statusPlate:FindFirstChild("StatusGradient") :: UIGradient?
+	local statusText = statusPlate and statusPlate:FindFirstChild("StatusText") :: TextLabel?
+
+	if isPvpOn then
+		if stateGrad then stateGrad.Color = ON_STATE_GRADIENT end
+		if statusGrad then statusGrad.Color = ON_PLATE_GRADIENT end
+		if statusText then statusText.Text = "ON" end
+		if lamp then lamp.BackgroundColor3 = ON_LAMP_COLOR end
+	else
+		if stateGrad then stateGrad.Color = OFF_STATE_GRADIENT end
+		if statusGrad then statusGrad.Color = OFF_PLATE_GRADIENT end
+		if statusText then statusText.Text = "OFF" end
+		if lamp then lamp.BackgroundColor3 = OFF_LAMP_COLOR end
+	end
+
+	-- Optional non-destructive 0.15s temporary scale pop
+	if animate then
+		local oldScale = indicator:FindFirstChild("TempPvpPopScale")
+		if oldScale then oldScale:Destroy() end
+
+		local popScale = Instance.new("UIScale")
+		popScale.Name = "TempPvpPopScale"
+		popScale.Scale = 1.08
+		popScale.Parent = indicator
+
+		local tween = TweenService:Create(popScale, TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Scale = 1.0,
+		})
+		tween:Play()
+		tween.Completed:Connect(function()
+			if popScale and popScale.Parent then
+				popScale:Destroy()
+			end
+		end)
+	end
+end
+
+local function updatePvpIndicator(animate: boolean?)
+	local indicator = getPvpIndicatorFrame()
+	if not indicator then return end
+	local isPvpOn = (LocalPlayer:GetAttribute("PvPEnabled") == true)
+	applyPvpVisualState(indicator, isPvpOn, animate)
+end
+
+-- Listen for server attribute updates live
+LocalPlayer:GetAttributeChangedSignal("PvPEnabled"):Connect(function()
+	updatePvpIndicator(true)
+end)
+
+-- Re-bind after respawn
+LocalPlayer.CharacterAdded:Connect(function()
+	task.wait(0.2)
+	updatePvpIndicator(false)
+end)
+
+-- ===================================================================
+-- ZONE THEME COLORS FOR TOAST NOTIFICATIONS
+-- ===================================================================
+local ZONE_THEME_COLORS = {
+	[1] = Color3.fromRGB(45, 220, 255),
+	[2] = Color3.fromRGB(75, 235, 110),
+	[3] = Color3.fromRGB(70, 165, 255),
+	[4] = Color3.fromRGB(205, 120, 255),
+	[5] = Color3.fromRGB(255, 95, 45),
+}
 
 local TOOL_2D_ICONS = {
 	[1] = "rbxassetid://127693503289585",
@@ -284,7 +372,7 @@ ShowRevivePrompt.OnClientEvent:Connect(function()
 end)
 
 -- ===================================================================
--- 2. STORE MODAL & BUTTON
+-- 2. STORE MODAL
 -- ===================================================================
 local RESPONSIVE_STORE_SIZE = UDim2.fromOffset(680, 520)
 local MODAL_ZERO_SIZE = UDim2.fromOffset(580, 420)
@@ -404,42 +492,94 @@ end
 task.defer(hookStoreButtons)
 
 -- ===================================================================
--- 3. BOSS HEALTH BAR (ZONE 5 EXCLUSIVE)
+-- 3. PROXIMITY BOSS HEALTH BAR
 -- ===================================================================
-local BOSS_TWEEN_INFO = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-local currentBossHP = 0
-local currentBossMaxHP = 1500
-local isBossAlive = false
+local BOSS_TWEEN_INFO = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local isBossBarVisible = false
 
-local function updateBossBarVisibility()
+local function findActiveLeviathan(): Model?
+	local activeFolder = Workspace:FindFirstChild("ActiveCreatures")
+	if not activeFolder then return nil end
+	for _, m in ipairs(activeFolder:GetChildren()) do
+		if m:IsA("Model") then
+			local isLev = (m.Name == "TheLeviathan") or (m:GetAttribute("CreatureType") == "TheLeviathan")
+			if isLev then
+				local isAlive = m:GetAttribute("IsAlive")
+				local root = m.PrimaryPart or m:FindFirstChildWhichIsA("BasePart")
+				if isAlive ~= false and root then
+					return m
+				end
+			end
+		end
+	end
+	return nil
+end
+
+local function updateBossBarProximity()
 	if not bossBar then return end
+
 	local char = LocalPlayer.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
-	local inZone5 = hrp and (hrp.Position.Y <= -400)
-
-	if isBossAlive and currentBossHP > 0 and inZone5 then
-		bossBar.Visible = true
-		local percent = math.clamp(currentBossHP / currentBossMaxHP, 0, 1)
-
-		if bossBarFill then
-			TweenService:Create(bossBarFill, BOSS_TWEEN_INFO, {
-				Size = UDim2.new(percent, 0, 1, 0)
-			}):Play()
+	if not hrp then
+		if isBossBarVisible then
+			bossBar.Visible = false
+			isBossBarVisible = false
 		end
+		return
+	end
 
-		if bossHPText then
-			bossHPText.Text = string.format("%d / %d HP", currentBossHP, currentBossMaxHP)
+	local inZone5 = (hrp.Position.Y <= -400)
+	local leviathan = if inZone5 then findActiveLeviathan() else nil
+
+	if leviathan then
+		local root = leviathan.PrimaryPart or leviathan:FindFirstChildWhichIsA("BasePart")
+		if root then
+			local distance = (root.Position - hrp.Position).Magnitude
+
+			if distance <= 180 then
+				local curHP = tonumber(leviathan:GetAttribute("Health")) or 1500
+				local maxHP = tonumber(leviathan:GetAttribute("MaxHealth")) or 1500
+
+				if curHP > 0 then
+					if not isBossBarVisible then
+						isBossBarVisible = true
+						bossBar.Position = UDim2.new(0.5, 0, 0, -80)
+						bossBar.Visible = true
+						TweenService:Create(bossBar, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+							Position = UDim2.new(0.5, 0, 0, 24),
+						}):Play()
+					end
+
+					local percent = math.clamp(curHP / maxHP, 0, 1)
+					if bossBarFill then
+						TweenService:Create(bossBarFill, BOSS_TWEEN_INFO, {
+							Size = UDim2.new(percent, 0, 1, 0),
+						}):Play()
+					end
+
+					if bossHPText then
+						bossHPText.Text = string.format("%d / %d HP", curHP, maxHP)
+					end
+					return
+				end
+			end
 		end
-	else
-		bossBar.Visible = false
+	end
+
+	if isBossBarVisible then
+		isBossBarVisible = false
+		local slideUp = TweenService:Create(bossBar, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Position = UDim2.new(0.5, 0, 0, -80),
+		})
+		slideUp:Play()
+		slideUp.Completed:Connect(function()
+			if not isBossBarVisible and bossBar then bossBar.Visible = false end
+		end)
 	end
 end
 
 BossHealthUpdate.OnClientEvent:Connect(function(curHP: number, maxHP: number, alive: boolean)
-	currentBossHP = curHP
-	currentBossMaxHP = maxHP
-	isBossAlive = alive
-	updateBossBarVisibility()
+	updateBossBarProximity()
 end)
 
 -- ===================================================================
@@ -601,6 +741,7 @@ local RESPONSIVE_SHOP_SIZE = UDim2.fromOffset(580, 450)
 
 local function openShop()
 	if not shopModal or isShopAnimating or shopModal.Visible then return end
+	playUIClick()
 	isShopAnimating = true
 	refreshShopMenu()
 	shopModal.Size = MODAL_ZERO_SIZE
@@ -654,23 +795,43 @@ local function hookShopPrompt()
 	if gearShop and gearShop.PrimaryPart then
 		local prompt = gearShop.PrimaryPart:WaitForChild("ShopPrompt", 3) :: ProximityPrompt?
 		if prompt then
-			prompt.Triggered:Connect(openShop)
+			prompt.Triggered:Connect(function()
+				playUIClick()
+				openShop()
+			end)
 		end
 	end
 end
 task.defer(hookShopPrompt)
 
 -- ===================================================================
--- 5. PRESTIGE MODAL
+-- 5. PRESTIGE MODAL (WIRED TO PRICECONTENT WITH ZERO GHOST TEXT)
 -- ===================================================================
 local RESPONSIVE_PRESTIGE_SIZE = UDim2.fromOffset(580, 420)
 
 local function updatePrestigeButtonState()
 	if not prestigeActionBtn then return end
 
+	prestigeActionBtn.Text = ""
+
+	local priceContent = prestigeActionBtn:FindFirstChild("PriceContent") :: Frame?
+	local label = priceContent and priceContent:FindFirstChild("Label") :: TextLabel?
+	local costLabel = priceContent and priceContent:FindFirstChild("Cost") :: TextLabel?
+	local pearlIcon = priceContent and priceContent:FindFirstChild("PearlIcon") :: ImageLabel?
+
+	if priceContent then
+		for _, desc in ipairs(priceContent:GetDescendants()) do
+			if desc:IsA("GuiObject") then
+				desc.Active = false
+			end
+		end
+	end
+
 	local currentRank = currentData.PrestigeLevel or 0
 	if currentRank >= 10 then
-		prestigeActionBtn.Text = "MAX PRESTIGE REACHED (RANK X)"
+		if label then label.Text = "MAX PRESTIGE REACHED (RANK X)" end
+		if costLabel then costLabel.Visible = false end
+		if pearlIcon then pearlIcon.Visible = false end
 		prestigeActionBtn.BackgroundColor3 = Color3.fromRGB(65, 75, 85)
 		prestigeActionBtn.AutoButtonColor = false
 		return
@@ -683,15 +844,29 @@ local function updatePrestigeButtonState()
 		and (currentData.DivingToolTier == 5)
 
 	if not allGearsMaxed then
-		prestigeActionBtn.Text = "MUST REACH TIER 5 ON ALL GEAR FIRST"
+		if label then label.Text = "MUST REACH TIER 5 ON ALL GEAR FIRST" end
+		if costLabel then costLabel.Visible = false end
+		if pearlIcon then pearlIcon.Visible = false end
 		prestigeActionBtn.BackgroundColor3 = Color3.fromRGB(85, 95, 105)
 		prestigeActionBtn.AutoButtonColor = false
+
 	elseif currentData.Pearls < 50000 then
-		prestigeActionBtn.Text = string.format("NEED %d MORE PEARLS (50,000 ⚪ REQUIRED)", 50000 - currentData.Pearls)
+		if label then label.Text = string.format("NEED %d MORE", 50000 - currentData.Pearls) end
+		if costLabel then
+			costLabel.Visible = true
+			costLabel.Text = "50,000"
+		end
+		if pearlIcon then pearlIcon.Visible = true end
 		prestigeActionBtn.BackgroundColor3 = Color3.fromRGB(180, 75, 75)
 		prestigeActionBtn.AutoButtonColor = false
+
 	else
-		prestigeActionBtn.Text = "PRESTIGE TO NEXT RANK (50,000 ⚪)"
+		if label then label.Text = "PRESTIGE TO NEXT RANK" end
+		if costLabel then
+			costLabel.Visible = true
+			costLabel.Text = "50,000"
+		end
+		if pearlIcon then pearlIcon.Visible = true end
 		prestigeActionBtn.BackgroundColor3 = Color3.fromRGB(250, 190, 35)
 		prestigeActionBtn.AutoButtonColor = true
 	end
@@ -699,6 +874,7 @@ end
 
 local function openPrestigeModal()
 	if not prestigeModal or prestigeModal.Visible then return end
+	playUIClick()
 	updatePrestigeButtonState()
 	prestigeModal.Size = MODAL_ZERO_SIZE
 	prestigeModal.Visible = true
@@ -740,21 +916,38 @@ local function hookPrestigeShrinePrompt()
 	if shrine and shrine.PrimaryPart then
 		local prompt = shrine.PrimaryPart:WaitForChild("PrestigePrompt", 3) :: ProximityPrompt?
 		if prompt then
-			prompt.Triggered:Connect(openPrestigeModal)
+			prompt.Triggered:Connect(function()
+				playUIClick()
+				openPrestigeModal()
+			end)
 		end
 	end
 end
 task.defer(hookPrestigeShrinePrompt)
 
+-- Hooks the PvP Station Prompt to play single UI audio on trigger
+local function hookPvPStationPrompt()
+	local dockArea = Workspace:WaitForChild("DockArea")
+	local pvpStation = dockArea:WaitForChild("PvPStation", 5) :: Model?
+	if pvpStation and pvpStation.PrimaryPart then
+		local prompt = pvpStation.PrimaryPart:WaitForChild("PvPPrompt", 3) :: ProximityPrompt?
+		if prompt then
+			prompt.Triggered:Connect(function()
+				playUIClick()
+			end)
+		end
+	end
+end
+task.defer(hookPvPStationPrompt)
+
 -- ===================================================================
--- 6. RESPONSIVE NOTIFICATION TOAST & STRICT AUDIO FILTER
+-- 6. RESPONSIVE NOTIFICATION TOAST
 -- ===================================================================
 local currentToastId = 0
-local function showNotification(message: string, style: string?, icon: string?, isZoneEntry: boolean?)
+local function showNotification(message: string, style: string?, icon: string?, zoneId: number?)
 	if not toast or not toastMessage then return end
 
-	-- Silences any creature defeat notifications entirely
-	local isKillNotification = (icon == "⚔️") or (string.find(message, "Defeated ") ~= nil)
+	local isKillNotification = (string.find(message, "Defeated ") ~= nil)
 	if isKillNotification then return end
 
 	currentToastId += 1
@@ -765,22 +958,57 @@ local function showNotification(message: string, style: string?, icon: string?, 
 
 	local isAbilityNotification = (icon == "🛡️") or (string.find(message, "Iron Skin") ~= nil) or (string.find(message, "Special") ~= nil)
 
-	if style == "Success" then
-		if toastStroke then toastStroke.Color = Color3.fromRGB(50, 215, 120) end
+	if zoneId and ZONE_THEME_COLORS[zoneId] then
+		local zColor = ZONE_THEME_COLORS[zoneId]
+		if toastStroke then toastStroke.Color = zColor end
+		toastMessage.TextColor3 = zColor
+
+		if toastGradient then
+			toastGradient.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0.0, Color3.fromRGB(255, 255, 255)),
+				ColorSequenceKeypoint.new(1.0, zColor),
+			})
+		end
+		if sfxZoneSwitcher then sfxZoneSwitcher:Play() end
+
+	elseif style == "Success" then
+		local successColor = Color3.fromRGB(50, 215, 120)
+		if toastStroke then toastStroke.Color = successColor end
+		toastMessage.TextColor3 = successColor
+		if toastGradient then
+			toastGradient.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0.0, Color3.fromRGB(255, 255, 255)),
+				ColorSequenceKeypoint.new(1.0, successColor),
+			})
+		end
 		if sfxSell and not isAbilityNotification then
 			local isSaleToast = string.find(message, "Sold") ~= nil or string.find(message, "Pearls") ~= nil
 			if isSaleToast then sfxSell:Play() end
 		end
+
 	elseif style == "Warning" then
-		if toastStroke then toastStroke.Color = Color3.fromRGB(255, 130, 60) end
+		local warnColor = Color3.fromRGB(255, 130, 60)
+		if toastStroke then toastStroke.Color = warnColor end
+		toastMessage.TextColor3 = warnColor
+		if toastGradient then
+			toastGradient.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0.0, Color3.fromRGB(255, 255, 255)),
+				ColorSequenceKeypoint.new(1.0, warnColor),
+			})
+		end
+
 	else
-		if toastStroke then toastStroke.Color = Color3.fromRGB(70, 195, 255) end
-		if isZoneEntry then
-			if sfxZoneSwitcher then sfxZoneSwitcher:Play() end
-		else
-			if sfxCollect and not isAbilityNotification then
-				sfxCollect:Play()
-			end
+		local infoColor = Color3.fromRGB(70, 195, 255)
+		if toastStroke then toastStroke.Color = infoColor end
+		toastMessage.TextColor3 = infoColor
+		if toastGradient then
+			toastGradient.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0.0, Color3.fromRGB(255, 255, 255)),
+				ColorSequenceKeypoint.new(1.0, infoColor),
+			})
+		end
+		if sfxCollect and not isAbilityNotification then
+			sfxCollect:Play()
 		end
 	end
 
@@ -806,14 +1034,14 @@ local function showNotification(message: string, style: string?, icon: string?, 
 end
 
 NotifyClient.OnClientEvent:Connect(function(msg, style, icon)
-	showNotification(msg, style, icon, false)
+	showNotification(msg, style, icon, nil)
 end)
 
--- Depth Zone Entry Tracker with ZoneSwitcher audio
+-- Depth Zone Entry Tracker & Proximity Boss Bar Loop
 local lastZoneId = 1
 task.spawn(function()
 	while true do
-		task.wait(0.5)
+		task.wait(0.4)
 		local char = LocalPlayer.Character
 		if char then
 			local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
@@ -822,12 +1050,12 @@ task.spawn(function()
 				if zone and zone.Id ~= lastZoneId then
 					lastZoneId = zone.Id
 					local dangerEmoji = if zone.Id == 1 then "🌊" elseif zone.Id == 2 then "🌿" elseif zone.Id == 3 then "☠️" elseif zone.Id == 4 then "🐙" else "👑"
-					showNotification(string.format("Entering Zone %d: %s (%s Danger)", zone.Id, zone.Name, zone.Danger), "Info", dangerEmoji, true)
+					showNotification(string.format("Entering Zone %d: %s (%s Danger)", zone.Id, zone.Name, zone.Danger), "Info", dangerEmoji, zone.Id)
 				end
 			else
 				lastZoneId = 1
 			end
-			updateBossBarVisibility()
+			updateBossBarProximity()
 		else
 			if bossBar then bossBar.Visible = false end
 		end
@@ -863,7 +1091,7 @@ task.spawn(function()
 end)
 
 -- ===================================================================
--- 7. HUD & OXYGEN CONTROLLER WITH DYNAMIC GRADIENTS
+-- 7. HUD & OXYGEN CONTROLLER
 -- ===================================================================
 local function updateToolVisuals(tier: number)
 	if not slotAttackToolIcon then
@@ -934,17 +1162,8 @@ PlayerDataUpdate.OnClientEvent:Connect(function(data)
 		refreshStoreButtons()
 	end
 
-	if data.PvPEnabled ~= nil and pvpText and pvpStroke then
+	if data.PvPEnabled ~= nil then
 		currentData.PvPEnabled = data.PvPEnabled
-		if data.PvPEnabled then
-			pvpText.Text = "⚔️ PVP: ON"
-			pvpText.TextColor3 = Color3.fromRGB(255, 95, 80)
-			pvpStroke.Color = Color3.fromRGB(255, 75, 75)
-		else
-			pvpText.Text = "🛡️ PVP: OFF"
-			pvpText.TextColor3 = Color3.fromRGB(180, 195, 210)
-			pvpStroke.Color = Color3.fromRGB(90, 105, 120)
-		end
 	end
 
 	if slotAbility and data.DivingSuitTier then
@@ -1020,6 +1239,7 @@ end)
 
 task.defer(function()
 	updateToolVisuals(currentData.DivingToolTier or 1)
+	updatePvpIndicator(false)
 end)
 
-print("[Deep Tides] UIController: Active without creature kill toast clutter.")
+print("[Deep Tides] UIController: Active with wired PvpIndicator, no 2x SFX & single clean toasts.")

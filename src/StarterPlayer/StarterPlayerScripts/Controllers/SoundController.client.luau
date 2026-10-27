@@ -15,15 +15,21 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera or Workspace:WaitForChild("Camera")
 
 -- ===================================================================
--- 1. ASSET CONFIGURATION (BOOSTED VOLUME FOR SPEAKERS & HEADSETS)
+-- 1. ASSET CONFIGURATION (MAXED VOLUME, ZONE AUDIO IS THE ONLY BGM)
 -- ===================================================================
+local ZONE_BOOST = 2.5 -- master multiplier for all zone tracks. Roblox caps Sound.Volume at 10.
+
+local function boosted(base: number): number
+	return math.min(base * ZONE_BOOST, 10)
+end
+
 local AUDIO_CONFIG = {
 	Zones = {
-		[1] = { Name = "Zone1", Id = "rbxassetid://119597691222471", Volume = 1.45 },
-		[2] = { Name = "Zone2", Id = "rbxassetid://118851488239880", Volume = 1.50 },
-		[3] = { Name = "Zone3", Id = "rbxassetid://129784455409166", Volume = 1.55 },
-		[4] = { Name = "Zone4", Id = "rbxassetid://106263573022419", Volume = 1.60 },
-		[5] = { Name = "Zone5", Id = "rbxassetid://140450929690782", Volume = 1.70 },
+		[1] = { Name = "Zone1", Id = "rbxassetid://119597691222471", Volume = boosted(1.45) }, -- ~3.6
+		[2] = { Name = "Zone2", Id = "rbxassetid://118851488239880", Volume = boosted(1.50) }, -- ~3.75
+		[3] = { Name = "Zone3", Id = "rbxassetid://129784455409166", Volume = boosted(1.55) }, -- ~3.9
+		[4] = { Name = "Zone4", Id = "rbxassetid://106263573022419", Volume = boosted(1.60) }, -- ~4.0
+		[5] = { Name = "Zone5", Id = "rbxassetid://140450929690782", Volume = boosted(1.70) }, -- ~4.25
 	},
 
 	UnderwaterDrone = { Id = "rbxassetid://9126147241", TargetVolume = 0.18 },
