@@ -1,7 +1,6 @@
 --!strict
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
-local SoundService = game:GetService("SoundService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local HttpService = game:GetService("HttpService")
@@ -51,8 +50,6 @@ local ShowRevivePrompt = remotesFolder:WaitForChild("ShowRevivePrompt") :: Remot
 local HideRevivePrompt = remotesFolder:WaitForChild("HideRevivePrompt") :: RemoteEvent
 local NotifyClient = remotesFolder:WaitForChild("NotifyClient") :: RemoteEvent
 
-local damageSfxFolder = SoundService:WaitForChild("DamageSFX", 10) :: Folder?
-
 local updatePvPVisuals: (player: Player, isEnabled: boolean) -> ()
 
 -- Spawns a physical loot bag on the seabed when a player dies in PvP mode
@@ -101,6 +98,7 @@ local function spawnDroppedLootBag(position: Vector3, bagItems: { any }, victim:
 			end
 		end
 
+		-- PREVENT DUPLICATION: If looted, wipe victim's backup and close their revive window!
 		if victim:IsDescendantOf(Players) then
 			victim:SetAttribute("LastDroppedLoot", nil)
 			HideRevivePrompt:FireClient(victim)
@@ -134,6 +132,7 @@ local function handleCharacterAdded(player: Player, char: Model)
 		local currentBag = PlayerDataManager.GetBag(player)
 
 		if inPvP then
+			-- PvP Death: Drop physical bag on seabed & allow 30s revive race
 			player:SetAttribute("LastDroppedLoot", HttpService:JSONEncode(currentBag))
 			player:SetAttribute("LastPvPDeathTime", os.clock())
 
@@ -150,6 +149,7 @@ local function handleCharacterAdded(player: Player, char: Model)
 				end
 			end)
 		else
+			-- PvE Death (Drowning, Wildlife, Pressure): Loot is lost to the sea!
 			if #currentBag > 0 then
 				PlayerDataManager.ClearBag(player)
 				NotifyClient:FireClient(player, "YOU DIED!", "You lost your collected loot. Upgrade your gear to dive deeper!", "Warning", "💀")
@@ -272,12 +272,12 @@ end
 task.defer(hookPvPStation)
 
 -- ===================================================================
--- 4. PVP ATTACKS (RANGED HARPOON & PVPWEAPONHIT SFX)
+-- 4. PVP ATTACKS
 -- ===================================================================
 local AttackRequest = remotesFolder:WaitForChild("AttackRequest") :: RemoteEvent
 local playerAttackCooldowns: { [Player]: number } = {}
 
-AttackRequest.OnServerEvent:Connect(function(attacker: Player, clientAimDir: any)
+AttackRequest.OnServerEvent:Connect(function(attacker: Player)
 	local attackerChar = attacker.Character
 	if not attackerChar then return end
 	local attackerHRP = attackerChar:FindFirstChild("HumanoidRootPart") :: BasePart?
@@ -292,16 +292,10 @@ AttackRequest.OnServerEvent:Connect(function(attacker: Player, clientAimDir: any
 
 	local now = os.clock()
 	local lastAttack = playerAttackCooldowns[attacker] or 0
-	if now - lastAttack < (toolConfig.Cooldown - 0.05) then return end
+	if now - lastAttack < toolConfig.Cooldown then return end
 	playerAttackCooldowns[attacker] = now
 
-	local isRangedHarpoon = (toolTier == 3)
-	local attackRange = if isRangedHarpoon then 65.0 else 14.0
-
-	local aimDirection: Vector3 = if typeof(clientAimDir) == "Vector3" and clientAimDir.Magnitude > 0.1
-		then clientAimDir.Unit
-		else attackerHRP.CFrame.LookVector
-
+	local ATTACK_RANGE = 12.0
 	for _, target in ipairs(Players:GetPlayers()) do
 		if target ~= attacker then
 			local targetChar = target.Character
@@ -310,20 +304,8 @@ AttackRequest.OnServerEvent:Connect(function(attacker: Player, clientAimDir: any
 				local targetHum = targetChar:FindFirstChildOfClass("Humanoid")
 
 				if targetHRP and targetHum and targetHum.Health > 0 and targetHRP.Position.Y < 0.5 then
-					local toTarget = targetHRP.Position - attackerHRP.Position
-					local forwardDist = toTarget:Dot(aimDirection)
-
-					local isHit = false
-					if isRangedHarpoon then
-						if forwardDist > 1.5 and forwardDist <= attackRange then
-							local perpDist = (toTarget - (aimDirection * forwardDist)).Magnitude
-							if perpDist <= 4.0 then isHit = true end
-						end
-					else
-						if toTarget.Magnitude <= attackRange then isHit = true end
-					end
-
-					if isHit then
+					local dist = (targetHRP.Position - attackerHRP.Position).Magnitude
+					if dist <= ATTACK_RANGE then
 						local baseDmg = toolConfig.Damage
 						local finalDmg = baseDmg
 
@@ -333,18 +315,6 @@ AttackRequest.OnServerEvent:Connect(function(attacker: Player, clientAimDir: any
 							NotifyClient:FireClient(target, string.format("Shield Blocked Hit! Took %d dmg from %s", finalDmg, attacker.Name), "Success", "🛡️")
 						else
 							NotifyClient:FireClient(target, string.format("Attacked by %s! (-%d HP)", attacker.Name, finalDmg), "Warning", "⚔️")
-						end
-
-						-- Play PvPWeaponHit 3D audio at victim location
-						if damageSfxFolder and targetHRP then
-							local pvpSound = damageSfxFolder:FindFirstChild("PvPWeaponHit") :: Sound?
-							if pvpSound then
-								local sfx = pvpSound:Clone()
-								sfx.Parent = targetHRP
-								sfx.PlaybackSpeed = math.random(95, 105) / 100
-								sfx:Play()
-								task.delay(1.5, function() sfx:Destroy() end)
-							end
 						end
 
 						targetChar:SetAttribute("LastPvPAttacker", attacker.UserId)
@@ -482,4 +452,4 @@ AbilityRequest.OnServerEvent:Connect(function(player: Player)
 	end
 end)
 
-print("[Deep Tides] ServerInit: Clean text badges, PvPWeaponHit SFX & anti-dupe PvP active.")
+print("[Deep Tides] ServerInit: Clean text badges & anti-dupe PvP loop active.")

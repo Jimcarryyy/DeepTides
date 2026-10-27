@@ -1,6 +1,6 @@
 --!strict
 -- CombatClient.client.luau
--- R6 Combat Controller: Tool Equip [1] Key Handling, Smooth Aim Glide, 85 studs/s Harpoon Flight & Impale Sticking
+-- R6 Combat Controller: Fixed Dodge Dash Velocity (DASH_SPEED = 65), Strict Multi-Layer Cooldown Lock, Instance-Linked Shield Lifecycle, Tool Equip [1] Key, Smooth Aim Glide & Harpoon Flight
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -143,7 +143,105 @@ local function flashHitmarker()
 end
 
 -- ===================================================================
--- 2. TOOL TIER IDENTIFICATION & EQUIP TOGGLE ([1] KEY)
+-- 2. COOLDOWN MASK ENGINE & CONFIGURATION
+-- ===================================================================
+local activeCooldownTrackers: { [string]: { Tween: Tween?, Thread: thread? } } = {}
+local specialCooldownUntil = 0
+local dodgeCooldownUntil = 0
+local SPECIAL_COOLDOWN = 15.0
+local DODGE_COOLDOWN = 1.4
+local DASH_SPEED = 65 -- Restored: Defines linear dodge impulse velocity
+
+local function getActionSlot(slotName: string): Frame?
+	local hud = playerGui:FindFirstChild("MainHUD")
+	if not hud then return nil end
+	local bar = hud:FindFirstChild("CombatActionBar", true)
+	if not bar then return nil end
+	return bar:FindFirstChild(slotName) :: Frame?
+end
+
+local function startCooldownMask(slotName: string, duration: number, showCountdown: boolean)
+	local slot = getActionSlot(slotName)
+	if not slot then return end
+
+	local overlay = slot:FindFirstChild("CooldownOverlay") :: Frame?
+	local cdLabel = slot:FindFirstChild("CooldownLabel") :: TextLabel?
+	if not overlay then return end
+
+	local existing = activeCooldownTrackers[slotName]
+	if existing then
+		if existing.Tween then existing.Tween:Cancel() end
+		if existing.Thread then task.cancel(existing.Thread) end
+		activeCooldownTrackers[slotName] = nil
+	end
+
+	overlay.Position = UDim2.new(0, 0, 1, 0)
+	overlay.AnchorPoint = Vector2.new(0, 1)
+	overlay.Size = UDim2.new(1, 0, 1, 0)
+	overlay.Visible = true
+
+	if cdLabel and showCountdown then
+		cdLabel.Text = string.format("%.1fs", duration)
+		cdLabel.Visible = true
+	elseif cdLabel then
+		cdLabel.Visible = false
+	end
+
+	local tween = TweenService:Create(overlay, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
+		Size = UDim2.new(1, 0, 0, 0),
+	})
+	tween:Play()
+
+	local cdThread = task.spawn(function()
+		local startTime = os.clock()
+		while true do
+			local elapsed = os.clock() - startTime
+			local remaining = math.max(0, duration - elapsed)
+
+			if cdLabel and showCountdown then
+				if remaining >= 1.0 then
+					cdLabel.Text = string.format("%.0fs", math.ceil(remaining))
+				else
+					cdLabel.Text = string.format("%.1fs", remaining)
+				end
+			end
+
+			if remaining <= 0 then break end
+			task.wait(0.05)
+		end
+
+		overlay.Visible = false
+		if cdLabel then cdLabel.Visible = false end
+		activeCooldownTrackers[slotName] = nil
+	end)
+
+	activeCooldownTrackers[slotName] = { Tween = tween, Thread = cdThread }
+end
+
+-- Pure Silent Multi-Layer Cooldown Verification for Q Ability
+local function isAbilityOnCooldown(): boolean
+	-- 1. High-precision hardware clock check
+	if os.clock() < specialCooldownUntil then return true end
+
+	-- 2. Active animation thread/tween check
+	if activeCooldownTrackers["Slot_Ability"] ~= nil then return true end
+
+	-- 3. GUI visual overlay verification (if dark mask is visible, action is blocked)
+	local slot = getActionSlot("Slot_Ability")
+	if slot then
+		local overlay = slot:FindFirstChild("CooldownOverlay") :: Frame?
+		if overlay and overlay.Visible then return true end
+	end
+
+	-- 4. Active shield presence check on character
+	local char = LocalPlayer.Character
+	if char and char:FindFirstChild("SuitAbilityShield") then return true end
+
+	return false
+end
+
+-- ===================================================================
+-- 3. TOOL TIER IDENTIFICATION & EQUIP TOGGLE ([1] KEY)
 -- ===================================================================
 local function getToolTier(tool: Tool?): number
 	if not tool then return 1 end
@@ -178,10 +276,8 @@ local function toggleToolEquipped()
 
 	local currentTool = char:FindFirstChildOfClass("Tool")
 	if currentTool then
-		-- Holster tool to backpack
 		hum:UnequipTools()
 	else
-		-- Draw tool from backpack
 		local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
 		if backpack then
 			local tool = backpack:FindFirstChildOfClass("Tool")
@@ -193,13 +289,78 @@ local function toggleToolEquipped()
 end
 
 -- ===================================================================
--- 3. ANIMATION TRACK MANAGEMENT & TOOL SFX HOOKS
+-- 4. ANIMATION TRACK MANAGEMENT & LIFECYCLE HOOKS
 -- ===================================================================
 local slashTrack1: AnimationTrack? = nil
 local slashTrack2: AnimationTrack? = nil
 local harpoonTrack: AnimationTrack? = nil
+local activeShieldVFX: Instance? = nil
 
 local triggerAttack: () -> ()
+
+-- Instance-Linked VFX Lifecycle: Bound directly to SuitAbilityShield
+local function hookShieldInstance(character: Model, shieldPart: BasePart)
+	if activeShieldVFX then
+		activeShieldVFX:Destroy()
+		activeShieldVFX = nil
+	end
+
+	local hrp = character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not hrp then return end
+
+	local vfxClone = ironSkinTemplate:Clone()
+	activeShieldVFX = vfxClone
+
+	-- DYNAMIC COLOR MATCH: Automatically copies the exact Color3 from the forcefield sphere
+	local targetColorSeq = ColorSequence.new(shieldPart.Color)
+	for _, emitter in ipairs(vfxClone:GetDescendants()) do
+		if emitter:IsA("ParticleEmitter") then
+			emitter.Color = targetColorSeq
+			emitter.Enabled = true
+		end
+	end
+
+	if vfxClone:IsA("Attachment") then
+		vfxClone.Position = Vector3.zero
+		vfxClone.Parent = hrp
+	elseif vfxClone:IsA("BasePart") then
+		vfxClone.CFrame = hrp.CFrame
+		vfxClone.CanCollide = false
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = hrp
+		weld.Part1 = vfxClone
+		weld.Parent = vfxClone
+		vfxClone.Parent = character
+	else
+		vfxClone.Parent = character
+	end
+
+	-- SYNCHRONIZED DESTRUCTION: When the server destroys SuitAbilityShield, instantly clean up particles
+	local ancestryConn: RBXScriptConnection? = nil
+	local function cleanup()
+		if ancestryConn then
+			ancestryConn:Disconnect()
+			ancestryConn = nil
+		end
+		if vfxClone and vfxClone.Parent then
+			for _, emitter in ipairs(vfxClone:GetDescendants()) do
+				if emitter:IsA("ParticleEmitter") then
+					emitter.Enabled = false
+				end
+			end
+			vfxClone:Destroy()
+		end
+		if activeShieldVFX == vfxClone then
+			activeShieldVFX = nil
+		end
+	end
+
+	ancestryConn = shieldPart.AncestryChanged:Connect(function(_, parent)
+		if not parent then cleanup() end
+	end)
+
+	shieldPart.Destroying:Connect(cleanup)
+end
 
 local function loadTracks(character: Model)
 	local hum = character:WaitForChild("Humanoid", 10) :: Humanoid?
@@ -228,10 +389,18 @@ local function loadTracks(character: Model)
 		if child:IsA("Tool") then hookTool(child) end
 	end
 
+	-- Check if a shield is already active upon character load
+	local existingShield = character:FindFirstChild("SuitAbilityShield")
+	if existingShield and existingShield:IsA("BasePart") then
+		hookShieldInstance(character, existingShield)
+	end
+
 	character.ChildAdded:Connect(function(child)
 		if child:IsA("Tool") then
 			hookTool(child)
 			playToolEquipSFX()
+		elseif child.Name == "SuitAbilityShield" and child:IsA("BasePart") then
+			hookShieldInstance(character, child)
 		end
 	end)
 
@@ -246,7 +415,7 @@ if LocalPlayer.Character then loadTracks(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(loadTracks)
 
 -- ===================================================================
--- 4. 3D HARPOON SPEAR PROJECTILE WITH IMPALE STICKING EFFECT
+-- 5. 3D HARPOON SPEAR PROJECTILE WITH IMPALE STICKING EFFECT
 -- ===================================================================
 local function spawnHarpoonBullet(startPos: Vector3, direction: Vector3)
 	local bullet = harpoonBulletTemplate:Clone()
@@ -342,7 +511,7 @@ local function spawnHarpoonBullet(startPos: Vector3, direction: Vector3)
 end
 
 -- ===================================================================
--- 5. TARGET SCANNER
+-- 6. TARGET SCANNER
 -- ===================================================================
 local currentLockedPosition: Vector3? = nil
 
@@ -381,7 +550,7 @@ local function scanForCreatureTarget(): (Model?, Vector3?)
 end
 
 -- ===================================================================
--- 6. ATTACK SYSTEM (PACED COOLDOWNS & SMOOTH SWIVEL)
+-- 7. ATTACK SYSTEM (PACED COOLDOWNS & ACTION BAR MASKS)
 -- ===================================================================
 local isAttackOnCooldown = false
 local comboStep = 1
@@ -429,7 +598,6 @@ triggerAttack = function()
 
 	local equippedTool = getEquippedTool()
 	if not equippedTool then
-		-- Automatically draw tool if player attempts to attack while unequipped
 		toggleToolEquipped()
 		return
 	end
@@ -439,6 +607,7 @@ triggerAttack = function()
 	-- Harpoon Gun (Tier 3)
 	if tier == 3 then
 		isAttackOnCooldown = true
+		startCooldownMask("Slot_Attack", HARPOON_COOLDOWN, false)
 
 		local aimDir = Camera.CFrame.LookVector.Unit
 		if currentLockedPosition then
@@ -494,6 +663,8 @@ triggerAttack = function()
 	isAttackOnCooldown = true
 
 	if comboStep == 1 then
+		startCooldownMask("Slot_Attack", INTER_COMBO_COOLDOWN, false)
+
 		if slashTrack2 then slashTrack2:Stop() end
 		if slashTrack1 then
 			slashTrack1:Stop()
@@ -511,6 +682,8 @@ triggerAttack = function()
 			isAttackOnCooldown = false
 		end)
 	else
+		startCooldownMask("Slot_Attack", COMBO_RECOVERY_COOLDOWN, false)
+
 		if slashTrack1 then slashTrack1:Stop() end
 		if slashTrack2 then
 			slashTrack2:Stop()
@@ -531,7 +704,7 @@ triggerAttack = function()
 end
 
 -- ===================================================================
--- 7. SILKY SMOOTH CAMERA GLIDE & OVER-THE-SHOULDER AIM
+-- 8. SILKY SMOOTH CAMERA GLIDE & OVER-THE-SHOULDER AIM
 -- ===================================================================
 local isAiming = false
 local aimToggledOffByUser = false
@@ -623,21 +796,19 @@ local function toggleAimManual()
 end
 
 -- ===================================================================
--- 8. CLEAN UNDERWATER DODGE & IRON SKIN
+-- 9. CLEAN UNDERWATER DODGE & STRICT MULTI-LAYER ABILITY LOCK
 -- ===================================================================
-local isDodgeOnCooldown = false
-local DODGE_COOLDOWN = 1.4
-local DASH_SPEED = 65
-
 local function triggerDodge()
-	if isDodgeOnCooldown then return end
+	-- Timestamp lockout for dodge
+	if os.clock() < dodgeCooldownUntil then return end
 
 	local char = LocalPlayer.Character
 	if not char then return end
 	local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
 	if not hrp or hrp.Position.Y > ZoneConfig.WATER_SURFACE_Y then return end
 
-	isDodgeOnCooldown = true
+	dodgeCooldownUntil = os.clock() + DODGE_COOLDOWN
+	startCooldownMask("Slot_Dodge", DODGE_COOLDOWN, true)
 
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	local moveDir = if hum and hum.MoveDirection.Magnitude > 0.1 then hum.MoveDirection.Unit else Camera.CFrame.LookVector.Unit
@@ -660,72 +831,32 @@ local function triggerDodge()
 	lv.Parent = hrp
 
 	task.delay(0.25, function() lv:Destroy() end)
-	task.delay(DODGE_COOLDOWN, function() isDodgeOnCooldown = false end)
 end
 
-local isSpecialOnCooldown = false
-local SPECIAL_COOLDOWN = 15.0
-local SPECIAL_DURATION = 6.0
-local currentShieldClone: Instance? = nil
-
+-- Ability Trigger: Pure Silent Lockout if Cooldown Active
 local function triggerSpecial()
-	if isSpecialOnCooldown then return end
+	-- Multi-layer lock: exits silently if timer, mask, or shield is active
+	if isAbilityOnCooldown() then return end
 
 	local char = LocalPlayer.Character
 	if not char then return end
 	local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
-	if not hrp or hrp.Position.Y > ZoneConfig.WATER_SURFACE_Y then return end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not hrp or not hum or hum.Health <= 0 then return end
+	if hrp.Position.Y > ZoneConfig.WATER_SURFACE_Y then return end
 
-	isSpecialOnCooldown = true
+	-- Lock timestamp immediately
+	specialCooldownUntil = os.clock() + SPECIAL_COOLDOWN
+
+	-- Start visual mask and countdown
+	startCooldownMask("Slot_Ability", SPECIAL_COOLDOWN, true)
 
 	playIronSkinSFX()
-
-	if currentShieldClone then
-		currentShieldClone:Destroy()
-		currentShieldClone = nil
-	end
-
-	local shield = ironSkinTemplate:Clone()
-	currentShieldClone = shield
-
-	if shield:IsA("Attachment") then
-		shield.Position = Vector3.zero
-		shield.Parent = hrp
-	elseif shield:IsA("BasePart") then
-		shield.CFrame = hrp.CFrame
-		shield.CanCollide = false
-		local weld = Instance.new("WeldConstraint")
-		weld.Part0 = hrp
-		weld.Part1 = shield
-		weld.Parent = shield
-		shield.Parent = char
-	else
-		shield.Parent = char
-	end
-
-	for _, emitter in ipairs(shield:GetDescendants()) do
-		if emitter:IsA("ParticleEmitter") then emitter.Enabled = true end
-	end
-
 	AbilityRemote:FireServer()
-
-	task.delay(SPECIAL_DURATION, function()
-		if shield and shield.Parent then
-			for _, emitter in ipairs(shield:GetDescendants()) do
-				if emitter:IsA("ParticleEmitter") then emitter.Enabled = false end
-			end
-			task.delay(1.5, function()
-				shield:Destroy()
-				if currentShieldClone == shield then currentShieldClone = nil end
-			end)
-		end
-	end)
-
-	task.delay(SPECIAL_COOLDOWN, function() isSpecialOnCooldown = false end)
 end
 
 -- ===================================================================
--- 9. INPUT BINDINGS
+-- 10. INPUT BINDINGS
 -- ===================================================================
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 and not gameProcessed then
@@ -772,4 +903,4 @@ task.spawn(function()
 	if specialBtn then specialBtn.MouseButton1Click:Connect(triggerSpecial) end
 end)
 
-print("[Deep Tides] CombatClient: Active with [1] Key Tool Equip and audio.")
+print("[Deep Tides] CombatClient: Active with Fixed Dodge Velocity & Silent Cooldown Lock.")

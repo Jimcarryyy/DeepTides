@@ -43,21 +43,31 @@ local TestBuyProduct = Remotes:WaitForChild("TestBuyProduct") :: RemoteEvent
 local ShowRevivePrompt = Remotes:WaitForChild("ShowRevivePrompt") :: RemoteEvent
 local HideRevivePrompt = Remotes:WaitForChild("HideRevivePrompt") :: RemoteEvent
 
--- UI References
-local pearlsPill = MainHUD:WaitForChild("PearlsPill", 3) :: Frame?
-local pearlsText = pearlsPill and pearlsPill:FindFirstChild("Value") :: TextLabel?
+-- ===================================================================
+-- UI REFERENCES (CONTAINER-AWARE RESOLUTION)
+-- ===================================================================
+-- Currency & Bag Frames (Resolved inside CurrencyFrame or root MainHUD)
+local currencyFrame = (MainHUD:WaitForChild("CurrencyFrame", 3) or MainHUD) :: Instance
+local pearlsPill = (currencyFrame:FindFirstChild("PearlsPill", true) or MainHUD:FindFirstChild("PearlsPill", true)) :: Frame?
+local pearlsText = pearlsPill and (pearlsPill:FindFirstChild("Value") or pearlsPill:FindFirstChild("Value", true)) :: TextLabel?
 
-local bagPill = MainHUD:WaitForChild("BagPill", 3) :: Frame?
-local bagText = bagPill and bagPill:FindFirstChild("Value") :: TextLabel?
+local bagPill = (currencyFrame:FindFirstChild("BagPill", true) or MainHUD:FindFirstChild("BagPill", true)) :: Frame?
+local bagText = bagPill and (bagPill:FindFirstChild("Value") or bagPill:FindFirstChild("Value", true)) :: TextLabel?
 local bagStroke = bagPill and bagPill:FindFirstChildOfClass("UIStroke") :: UIStroke?
 
-local pvpPill = MainHUD:FindFirstChild("PvPPill") :: Frame?
+local pvpPill = MainHUD:FindFirstChild("PvPPill", true) :: Frame?
 local pvpText = pvpPill and pvpPill:FindFirstChild("Value") :: TextLabel?
 local pvpStroke = pvpPill and pvpPill:FindFirstChildOfClass("UIStroke") :: UIStroke?
 
+-- Store Button (Resolved inside StoreFrame or root MainHUD)
+local storeFrame = (MainHUD:WaitForChild("StoreFrame", 3) or MainHUD) :: Instance
+local storeButton = (storeFrame:FindFirstChild("StoreButton", true) or MainHUD:FindFirstChild("StoreButton", true)) :: TextButton?
+
+-- Oxygen Bar References
 local oxygenContainer = MainHUD:WaitForChild("OxygenContainer", 3) :: Frame?
 local oxygenBarBg = oxygenContainer and oxygenContainer:FindFirstChild("BarBg") :: Frame?
 local oxygenFill = oxygenBarBg and oxygenBarBg:FindFirstChild("Fill") :: Frame?
+local oxygenFillGradient = oxygenFill and (oxygenFill:FindFirstChildOfClass("UIGradient") or oxygenFill:FindFirstChild("Gradient")) :: UIGradient?
 local oxygenText = oxygenBarBg and oxygenBarBg:FindFirstChild("Value") :: TextLabel?
 
 local toast = MainHUD:WaitForChild("NotificationToast", 3) :: Frame?
@@ -85,16 +95,16 @@ local prestigeActionBtn = prestigeModal and prestigeModal:FindFirstChild("Presti
 local storeModal = MainHUD:WaitForChild("StoreModal", 3) :: Frame?
 local storeList = storeModal and storeModal:FindFirstChild("List") :: ScrollingFrame?
 local storeCloseBtn = storeModal and (storeModal:FindFirstChild("CloseButton") or storeModal:FindFirstChild("CloseButton", true)) :: TextButton?
-local storeButton = MainHUD:WaitForChild("StoreButton", 3) :: TextButton?
 
 local bossBar = MainHUD:WaitForChild("BossBarContainer", 3) :: Frame?
 local bossBarFill = bossBar and bossBar:FindFirstChild("BarBg") and bossBar.BarBg:FindFirstChild("Fill") :: Frame?
 local bossHPText = bossBar and bossBar:FindFirstChild("BarBg") and bossBar.BarBg:FindFirstChild("HPText") :: TextLabel?
 
+-- Combat Action Bar
 local actionBar = MainHUD:WaitForChild("CombatActionBar", 3) :: Frame?
 local slotAttack = actionBar and actionBar:FindFirstChild("Slot_Attack") :: Frame?
 local slotAttackToolIcon = slotAttack and slotAttack:FindFirstChild("ToolIcon") :: ImageLabel?
-local slotAttackStroke = slotAttack and slotAttack:FindFirstChildOfClass("UIStroke") :: UIStroke?
+local slotAttackStroke = slotAttack and (slotAttack:FindFirstChild("OuterStroke") or slotAttack:FindFirstChildOfClass("UIStroke")) :: UIStroke?
 local slotAttackAction = slotAttack and slotAttack:FindFirstChild("ActionLabel") :: TextLabel?
 
 local slotAbility = actionBar and actionBar:FindFirstChild("Slot_Ability") :: Frame?
@@ -117,7 +127,7 @@ local function playUIClick()
 	end
 end
 
--- 2D TOOL ICON ASSETS
+-- 2D TOOL ASSET CONFIGURATION
 local TOOL_2D_ICONS = {
 	[1] = "rbxassetid://127693503289585", -- Gear_Tool_T1_RustyKnife
 	[2] = "rbxassetid://134893790957976", -- Gear_Tool_T2_SteelSpear
@@ -125,6 +135,29 @@ local TOOL_2D_ICONS = {
 	[4] = "rbxassetid://110126679421895", -- Gear_Tool_T4_ObsidianWarPick
 	[5] = "rbxassetid://133162210401549", -- Gear_Tool_T5_TridentOfTheDeep
 }
+
+local TOOL_TIER_NAMES = {
+	[1] = "KNIFE",
+	[2] = "SPEAR",
+	[3] = "HARPOON",
+	[4] = "WAR PICK",
+	[5] = "TRIDENT",
+}
+
+-- OXYGEN BAR DYNAMIC GRADIENTS
+local O2_NORMAL_GRADIENT = ColorSequence.new({
+	ColorSequenceKeypoint.new(0.00, Color3.fromRGB(15, 135, 230)),
+	ColorSequenceKeypoint.new(0.35, Color3.fromRGB(45, 215, 255)),
+	ColorSequenceKeypoint.new(0.65, Color3.fromRGB(120, 245, 255)),
+	ColorSequenceKeypoint.new(1.00, Color3.fromRGB(20, 150, 240)),
+})
+
+local O2_CRITICAL_GRADIENT = ColorSequence.new({
+	ColorSequenceKeypoint.new(0.00, Color3.fromRGB(180, 25, 25)),
+	ColorSequenceKeypoint.new(0.35, Color3.fromRGB(255, 55, 55)),
+	ColorSequenceKeypoint.new(0.65, Color3.fromRGB(255, 140, 70)),
+	ColorSequenceKeypoint.new(1.00, Color3.fromRGB(210, 30, 30)),
+})
 
 local PEARL_ICON_ASSET = "rbxassetid://101610215510039"
 local STUD_TEXTURE = "rbxassetid://18878365966"
@@ -259,10 +292,10 @@ ShowRevivePrompt.OnClientEvent:Connect(function()
 end)
 
 -- ===================================================================
--- 2. STORE MODAL
+-- 2. STORE MODAL & BUTTON
 -- ===================================================================
-local RESPONSIVE_STORE_SIZE = UDim2.new(0.9, 0, 0.85, 0)
-local MODAL_ZERO_SIZE = UDim2.new(0, 0, 0, 0)
+local RESPONSIVE_STORE_SIZE = UDim2.fromOffset(680, 520)  -- patched: modals use fixed design size + UIScale
+local MODAL_ZERO_SIZE = UDim2.fromOffset(580, 420)  -- patched: modals use fixed design size + UIScale
 
 local ONE_TIME_PURCHASES = { "DeepDiver", "TreasureHunter", "LeviathanPass", "StarterPack" }
 
@@ -572,7 +605,7 @@ local function refreshShopMenu()
 end
 
 local isShopAnimating = false
-local RESPONSIVE_SHOP_SIZE = UDim2.new(0.9, 0, 0.82, 0)
+local RESPONSIVE_SHOP_SIZE = UDim2.fromOffset(580, 450)  -- patched: modals use fixed design size + UIScale
 
 local function openShop()
 	if not shopModal or isShopAnimating or shopModal.Visible then return end
@@ -638,7 +671,7 @@ task.defer(hookShopPrompt)
 -- ===================================================================
 -- 5. PRESTIGE MODAL
 -- ===================================================================
-local RESPONSIVE_PRESTIGE_SIZE = UDim2.new(0.9, 0, 0.75, 0)
+local RESPONSIVE_PRESTIGE_SIZE = UDim2.fromOffset(580, 420)  -- patched: modals use fixed design size + UIScale
 
 local function updatePrestigeButtonState()
 	if not prestigeActionBtn then return end
@@ -734,14 +767,12 @@ local function showNotification(message: string, style: string?, icon: string?, 
 	toastMessage.Text = message
 	if toastIcon then toastIcon.Text = icon or "✨" end
 
-	-- Audio Isolation Filters
 	local isKillNotification = (icon == "⚔️") or (string.find(message, "Defeated ") ~= nil)
 	local isAbilityNotification = (icon == "🛡️") or (string.find(message, "Iron Skin") ~= nil) or (string.find(message, "Special") ~= nil)
 
 	if style == "Success" then
 		if toastStroke then toastStroke.Color = Color3.fromRGB(50, 215, 120) end
 
-		-- SFX_Sell plays ONLY on actual dock sales, NEVER on creature kills or ability activations
 		if sfxSell and not isKillNotification and not isAbilityNotification then
 			local isSaleToast = string.find(message, "Sold") ~= nil or string.find(message, "Pearls") ~= nil
 			if isSaleToast then
@@ -817,16 +848,19 @@ local function updateEquippedVisual()
 	if not char or not slotAttackStroke or not slotAttackAction then return end
 
 	local tool = char:FindFirstChildOfClass("Tool")
+	local currentTier = currentData.DivingToolTier or 1
+	local toolName = TOOL_TIER_NAMES[currentTier] or "KNIFE"
+
 	if tool then
-		slotAttackAction.Text = "HOLSTER [1]"
+		slotAttackAction.Text = toolName
 		slotAttackAction.TextColor3 = Color3.fromRGB(255, 235, 120)
 		slotAttackStroke.Color = Color3.fromRGB(70, 195, 255)
-		slotAttackStroke.Transparency = 0.35
+		slotAttackStroke.Transparency = 0.2
 	else
-		slotAttackAction.Text = "EQUIP [1]"
-		slotAttackAction.TextColor3 = Color3.fromRGB(190, 215, 235)
-		slotAttackStroke.Color = Color3.fromRGB(255, 255, 255)
-		slotAttackStroke.Transparency = 0.82
+		slotAttackAction.Text = toolName
+		slotAttackAction.TextColor3 = Color3.fromRGB(180, 215, 240)
+		slotAttackStroke.Color = Color3.fromRGB(10, 12, 16)
+		slotAttackStroke.Transparency = 0
 	end
 end
 
@@ -838,9 +872,9 @@ task.spawn(function()
 end)
 
 -- ===================================================================
--- 7. HUD & OXYGEN CONTROLLER
+-- 7. HUD & OXYGEN CONTROLLER WITH DYNAMIC GRADIENTS
 -- ===================================================================
-local function updateToolIcon(tier: number)
+local function updateToolVisuals(tier: number)
 	if not slotAttackToolIcon then
 		if slotAttack then
 			slotAttackToolIcon = slotAttack:FindFirstChild("ToolIcon") :: ImageLabel?
@@ -850,6 +884,10 @@ local function updateToolIcon(tier: number)
 	if slotAttackToolIcon then
 		local assetId = TOOL_2D_ICONS[tier] or TOOL_2D_ICONS[1]
 		slotAttackToolIcon.Image = assetId
+	end
+
+	if slotAttackAction then
+		slotAttackAction.Text = TOOL_TIER_NAMES[tier] or "KNIFE"
 	end
 end
 
@@ -894,9 +932,9 @@ PlayerDataUpdate.OnClientEvent:Connect(function(data)
 
 	if data.DivingToolTier then
 		currentData.DivingToolTier = data.DivingToolTier
-		updateToolIcon(data.DivingToolTier)
+		updateToolVisuals(data.DivingToolTier)
 	else
-		updateToolIcon(currentData.DivingToolTier)
+		updateToolVisuals(currentData.DivingToolTier)
 	end
 
 	if data.PrestigeLevel ~= nil then currentData.PrestigeLevel = data.PrestigeLevel end
@@ -948,10 +986,22 @@ OxygenUpdate.OnClientEvent:Connect(function(cur: number, max: number, isSubmerge
 			Size = UDim2.new(percent, 0, 1, 0)
 		}):Play()
 
-		if cur <= 8 then
-			oxygenFill.BackgroundColor3 = Color3.fromRGB(255, 75, 75)
+		if not oxygenFillGradient then
+			oxygenFillGradient = oxygenFill:FindFirstChildOfClass("UIGradient")
+		end
+
+		if oxygenFillGradient then
+			if cur <= 8 then
+				oxygenFillGradient.Color = O2_CRITICAL_GRADIENT
+			else
+				oxygenFillGradient.Color = O2_NORMAL_GRADIENT
+			end
 		else
-			oxygenFill.BackgroundColor3 = Color3.fromRGB(45, 195, 245)
+			if cur <= 8 then
+				oxygenFill.BackgroundColor3 = Color3.fromRGB(255, 75, 75)
+			else
+				oxygenFill.BackgroundColor3 = Color3.fromRGB(45, 195, 245)
+			end
 		end
 	end
 
@@ -978,7 +1028,7 @@ OxygenUpdate.OnClientEvent:Connect(function(cur: number, max: number, isSubmerge
 end)
 
 task.defer(function()
-	updateToolIcon(currentData.DivingToolTier or 1)
+	updateToolVisuals(currentData.DivingToolTier or 1)
 end)
 
-print("[Deep Tides] UIController: Active with dynamic 2D weapon icon & isolated notification audio.")
+print("[Deep Tides] UIController: Active with Container-Aware Currency & Store Resolution.")
