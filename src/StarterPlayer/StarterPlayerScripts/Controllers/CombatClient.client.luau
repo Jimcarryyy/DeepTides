@@ -1,6 +1,6 @@
 --!strict
 -- CombatClient.client.luau
--- R6 Combat Controller: Fixed Dodge Dash Velocity (DASH_SPEED = 65), Strict Multi-Layer Cooldown Lock, Instance-Linked Shield Lifecycle, Clickable CombatActionBar (Desktop & Mobile Touch), Smooth Aim Glide & Harpoon Flight
+-- R6 Combat Controller: Bold "Press Start 2P" Jumping Damage Numbers, 3D Harpoon Spear, Clickable Action Bar & Custom Crosshairs
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -53,9 +53,7 @@ local function playToolEquipSFX()
 	lastEquipTime = now
 
 	local sfx = toolsSfxFolder:FindFirstChild("ToolEquip") :: Sound? or SoundService:FindFirstChild("ToolEquip") :: Sound?
-	if sfx then
-		sfx:Play()
-	end
+	if sfx then sfx:Play() end
 end
 
 local function playToolUnequipSFX()
@@ -64,16 +62,12 @@ local function playToolUnequipSFX()
 	lastUnequipTime = now
 
 	local sfx = toolsSfxFolder:FindFirstChild("ToolUnequip") :: Sound? or SoundService:FindFirstChild("ToolUnequip") :: Sound?
-	if sfx then
-		sfx:Play()
-	end
+	if sfx then sfx:Play() end
 end
 
 local function playIronSkinSFX()
 	local sfx = SoundService:FindFirstChild("AbilityIronSkin") :: Sound? or toolsSfxFolder:FindFirstChild("AbilityIronSkin") :: Sound?
-	if sfx then
-		sfx:Play()
-	end
+	if sfx then sfx:Play() end
 end
 
 -- Animations
@@ -143,7 +137,76 @@ local function flashHitmarker()
 end
 
 -- ===================================================================
--- 2. COOLDOWN MASK ENGINE & CONFIGURATION
+-- 2. "PRESS START 2P" JUMPING DAMAGE NUMBER POPUP ENGINE
+-- ===================================================================
+local function spawnDamageNumber(targetPart: BasePart, amount: number)
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "DamageIndicator"
+	billboard.Size = UDim2.fromOffset(160, 50)
+	billboard.AlwaysOnTop = true
+	billboard.MaxDistance = 140
+
+	-- Slight random horizontal spread so consecutive hits don't overlap
+	local rx = math.random(-15, 15) / 10
+	local rz = math.random(-15, 15) / 10
+	local initialOffset = Vector3.new(rx, 1.8, rz)
+	billboard.StudsOffset = initialOffset
+	billboard.Adornee = targetPart
+
+	local label = Instance.new("TextLabel")
+	label.Name = "NumberLabel"
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Text = "-" .. tostring(amount)
+	label.TextColor3 = Color3.fromRGB(255, 235, 45) -- Bright energetic yellow
+	label.TextSize = 14 -- Starts compact for the jump-pop
+	label.Font = Enum.Font.Arcade -- Built-in Roblox enum for Press Start 2P
+
+	-- Apply modern FontFace with fallback
+	pcall(function()
+		label.FontFace = Font.fromName("Press Start 2P", Enum.FontWeight.Bold)
+	end)
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 3.0
+	stroke.Color = Color3.fromRGB(15, 15, 20)
+	stroke.Parent = label
+
+	label.Parent = billboard
+	billboard.Parent = activeEffectsFolder
+
+	-- Jump Animation: pops upward with spring bounce, floats up and fades
+	local jumpPeakOffset = initialOffset + Vector3.new(0, 3.4, 0)
+	local floatEndOffset = jumpPeakOffset + Vector3.new(0, 1.6, 0)
+
+	-- 1. Jump Pop Arc (Quick snappy expansion)
+	TweenService:Create(billboard, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		StudsOffset = jumpPeakOffset,
+	}):Play()
+	TweenService:Create(label, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		TextSize = 32, -- Very large and visible
+	}):Play()
+
+	-- 2. Drift Up & Dissolve
+	task.delay(0.28, function()
+		TweenService:Create(billboard, TweenInfo.new(0.48, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
+			StudsOffset = floatEndOffset,
+		}):Play()
+		TweenService:Create(label, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			TextTransparency = 1,
+		}):Play()
+		TweenService:Create(stroke, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Transparency = 1,
+		}):Play()
+	end)
+
+	task.delay(0.78, function()
+		billboard:Destroy()
+	end)
+end
+
+-- ===================================================================
+-- 3. COOLDOWN MASK ENGINE & CONFIGURATION
 -- ===================================================================
 local activeCooldownTrackers: { [string]: { Tween: Tween?, Thread: thread? } } = {}
 local specialCooldownUntil = 0
@@ -235,7 +298,7 @@ local function isAbilityOnCooldown(): boolean
 end
 
 -- ===================================================================
--- 3. TOOL TIER IDENTIFICATION & EQUIP TOGGLE ([1] KEY)
+-- 4. TOOL TIER IDENTIFICATION & EQUIP TOGGLE
 -- ===================================================================
 local function getToolTier(tool: Tool?): number
 	if not tool then return 1 end
@@ -283,7 +346,7 @@ local function toggleToolEquipped()
 end
 
 -- ===================================================================
--- 4. ANIMATION TRACK MANAGEMENT & LIFECYCLE HOOKS
+-- 5. ANIMATION TRACK MANAGEMENT & LIFECYCLE HOOKS
 -- ===================================================================
 local slashTrack1: AnimationTrack? = nil
 local slashTrack2: AnimationTrack? = nil
@@ -405,9 +468,9 @@ if LocalPlayer.Character then loadTracks(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(loadTracks)
 
 -- ===================================================================
--- 5. 3D HARPOON SPEAR PROJECTILE WITH IMPALE STICKING EFFECT
+-- 6. 3D HARPOON SPEAR PROJECTILE WITH IMPALE STICKING & DAMAGE POPUP
 -- ===================================================================
-local function spawnHarpoonBullet(startPos: Vector3, direction: Vector3)
+local function spawnHarpoonBullet(startPos: Vector3, direction: Vector3, damageAmount: number)
 	local bullet = harpoonBulletTemplate:Clone()
 	local root = bullet.PrimaryPart or bullet:FindFirstChildWhichIsA("BasePart")
 	if not root then
@@ -458,6 +521,7 @@ local function spawnHarpoonBullet(startPos: Vector3, direction: Vector3)
 						if connection then connection:Disconnect() end
 
 						flashHitmarker()
+						spawnDamageNumber(cRoot, damageAmount)
 						monsterHitSfx.PlaybackSpeed = math.random(95, 105) / 100
 						monsterHitSfx:Play()
 
@@ -501,7 +565,7 @@ local function spawnHarpoonBullet(startPos: Vector3, direction: Vector3)
 end
 
 -- ===================================================================
--- 6. TARGET SCANNER
+-- 7. TARGET SCANNER
 -- ===================================================================
 local currentLockedPosition: Vector3? = nil
 
@@ -540,7 +604,7 @@ local function scanForCreatureTarget(): (Model?, Vector3?)
 end
 
 -- ===================================================================
--- 7. ATTACK SYSTEM (PACED COOLDOWNS & ACTION BAR MASKS)
+-- 8. ATTACK SYSTEM (DAMAGE NUMBERS & COMBAT PACING)
 -- ===================================================================
 local isAttackOnCooldown = false
 local comboStep = 1
@@ -560,13 +624,14 @@ local function playMeleeAudio(tier: number)
 	end
 end
 
-local function checkMeleeMonsterHit(hrpPosition: Vector3)
+local function checkMeleeMonsterHit(hrpPosition: Vector3, damageAmount: number)
 	local activeCreatures = Workspace:FindFirstChild("ActiveCreatures")
 	if activeCreatures then
 		for _, creature in ipairs(activeCreatures:GetChildren()) do
 			local root = creature:FindFirstChild("HumanoidRootPart") or creature:FindFirstChildWhichIsA("BasePart")
 			if root and root:IsA("BasePart") and (root.Position - hrpPosition).Magnitude <= 10 then
 				flashHitmarker()
+				spawnDamageNumber(root, damageAmount)
 				monsterHitSfx.PlaybackSpeed = math.random(95, 105) / 100
 				monsterHitSfx:Play()
 				break
@@ -593,6 +658,8 @@ triggerAttack = function()
 	end
 
 	local tier = getToolTier(equippedTool)
+	local toolConfig = GearConfig.DivingTools[tier] or GearConfig.DivingTools[1]
+	local damageValue = toolConfig.Damage or 15
 
 	-- Harpoon Gun (Tier 3)
 	if tier == 3 then
@@ -634,7 +701,7 @@ triggerAttack = function()
 		harpoonSfx:Play()
 
 		local muzzlePos = hrp.Position + (aimDir * 2.5) + Vector3.new(0, 0.4, 0)
-		spawnHarpoonBullet(muzzlePos, aimDir)
+		spawnHarpoonBullet(muzzlePos, aimDir, damageValue)
 
 		AttackRemote:FireServer(aimDir)
 
@@ -662,7 +729,7 @@ triggerAttack = function()
 		end
 
 		playMeleeAudio(tier)
-		checkMeleeMonsterHit(hrp.Position)
+		checkMeleeMonsterHit(hrp.Position, damageValue)
 		AttackRemote:FireServer(Camera.CFrame.LookVector.Unit)
 
 		comboStep = 2
@@ -681,7 +748,7 @@ triggerAttack = function()
 		end
 
 		playMeleeAudio(tier)
-		checkMeleeMonsterHit(hrp.Position)
+		checkMeleeMonsterHit(hrp.Position, damageValue)
 		AttackRemote:FireServer(Camera.CFrame.LookVector.Unit)
 
 		comboStep = 1
@@ -694,7 +761,7 @@ triggerAttack = function()
 end
 
 -- ===================================================================
--- 8. SILKY SMOOTH CAMERA GLIDE & OVER-THE-SHOULDER AIM
+-- 9. SILKY SMOOTH CAMERA GLIDE & OVER-THE-SHOULDER AIM
 -- ===================================================================
 local isAiming = false
 local aimToggledOffByUser = false
@@ -786,7 +853,7 @@ local function toggleAimManual()
 end
 
 -- ===================================================================
--- 9. CLEAN UNDERWATER DODGE & STRICT MULTI-LAYER ABILITY LOCK
+-- 10. CLEAN UNDERWATER DODGE & STRICT MULTI-LAYER ABILITY LOCK
 -- ===================================================================
 local function triggerDodge()
 	if os.clock() < dodgeCooldownUntil then return end
@@ -840,9 +907,8 @@ local function triggerSpecial()
 end
 
 -- ===================================================================
--- 10. INPUT & ACTION BAR BINDINGS (DESKTOP & MOBILE TOUCH)
+-- 11. INPUT & ACTION BAR BINDINGS (DESKTOP & MOBILE TOUCH)
 -- ===================================================================
--- Universal click & touch binder for Action Bar slots
 local function hookSlotClick(slotInstance: Instance?, onClick: () -> ())
 	if not slotInstance then return end
 
@@ -870,7 +936,6 @@ local function hookSlotClick(slotInstance: Instance?, onClick: () -> ())
 	end
 end
 
--- Hook MainHUD.CombatActionBar Slots
 task.spawn(function()
 	local mainHUD = playerGui:WaitForChild("MainHUD", 10) :: ScreenGui?
 	if not mainHUD then return end
@@ -881,22 +946,10 @@ task.spawn(function()
 	local slotAbility = actionBar:FindFirstChild("Slot_Ability")
 	local slotDodge = actionBar:FindFirstChild("Slot_Dodge")
 
-	-- Slot 1: Click/Tap toggles Equip / Unequip
-	if slotAttack then
-		hookSlotClick(slotAttack, toggleToolEquipped)
-	end
+	if slotAttack then hookSlotClick(slotAttack, toggleToolEquipped) end
+	if slotAbility then hookSlotClick(slotAbility, triggerSpecial) end
+	if slotDodge then hookSlotClick(slotDodge, triggerDodge) end
 
-	-- Slot 2: Click/Tap triggers Q Suit Ability
-	if slotAbility then
-		hookSlotClick(slotAbility, triggerSpecial)
-	end
-
-	-- Slot 3: Click/Tap triggers Dodge Dash
-	if slotDodge then
-		hookSlotClick(slotDodge, triggerDodge)
-	end
-
-	-- Fallbacks for backward compatibility
 	local attackBtn = actionBar:FindFirstChild("AttackButton", true) :: TextButton?
 	if attackBtn then attackBtn.MouseButton1Click:Connect(triggerAttack) end
 
@@ -907,9 +960,7 @@ task.spawn(function()
 	if specialBtn then specialBtn.MouseButton1Click:Connect(triggerSpecial) end
 end)
 
--- Keyboard & Screen Tap Bindings
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	-- Tap / Left-Click on screen to Attack (when not clicking UI)
 	if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) and not gameProcessed then
 		triggerAttack()
 		return
@@ -917,7 +968,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 
 	if gameProcessed then return end
 
-	-- [1] Key: Equip / Holster Toggle
 	if input.KeyCode == Enum.KeyCode.One then
 		toggleToolEquipped()
 	elseif input.KeyCode == Enum.KeyCode.LeftAlt or input.KeyCode == Enum.KeyCode.RightAlt then
@@ -929,4 +979,4 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	end
 end)
 
-print("[Deep Tides] CombatClient: Active with Clickable Action Bar (Slots 1, 2, 3) & Mobile Touch.")
+print("[Deep Tides] CombatClient: 'Press Start 2P' Jumping Damage Numbers & Clickable Action Bar active.")

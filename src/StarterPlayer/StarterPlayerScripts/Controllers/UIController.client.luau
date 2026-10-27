@@ -46,7 +46,6 @@ local HideRevivePrompt = Remotes:WaitForChild("HideRevivePrompt") :: RemoteEvent
 -- ===================================================================
 -- UI REFERENCES (CONTAINER-AWARE RESOLUTION)
 -- ===================================================================
--- Currency & Bag Frames (Resolved inside CurrencyFrame or root MainHUD)
 local currencyFrame = (MainHUD:WaitForChild("CurrencyFrame", 3) or MainHUD) :: Instance
 local pearlsPill = (currencyFrame:FindFirstChild("PearlsPill", true) or MainHUD:FindFirstChild("PearlsPill", true)) :: Frame?
 local pearlsText = pearlsPill and (pearlsPill:FindFirstChild("Value") or pearlsPill:FindFirstChild("Value", true)) :: TextLabel?
@@ -59,11 +58,9 @@ local pvpPill = MainHUD:FindFirstChild("PvPPill", true) :: Frame?
 local pvpText = pvpPill and pvpPill:FindFirstChild("Value") :: TextLabel?
 local pvpStroke = pvpPill and pvpPill:FindFirstChildOfClass("UIStroke") :: UIStroke?
 
--- Store Button (Resolved inside StoreFrame or root MainHUD)
 local storeFrame = (MainHUD:WaitForChild("StoreFrame", 3) or MainHUD) :: Instance
 local storeButton = (storeFrame:FindFirstChild("StoreButton", true) or MainHUD:FindFirstChild("StoreButton", true)) :: TextButton?
 
--- Oxygen Bar References
 local oxygenContainer = MainHUD:WaitForChild("OxygenContainer", 3) :: Frame?
 local oxygenBarBg = oxygenContainer and oxygenContainer:FindFirstChild("BarBg") :: Frame?
 local oxygenFill = oxygenBarBg and oxygenBarBg:FindFirstChild("Fill") :: Frame?
@@ -75,7 +72,6 @@ local toastMessage = toast and toast:FindFirstChild("Message") :: TextLabel?
 local toastIcon = toast and toast:FindFirstChild("Icon") :: TextLabel?
 local toastStroke = toast and toast:FindFirstChildOfClass("UIStroke") :: UIStroke?
 
--- Hard UX Auto-Prompts
 local autoO2 = MainHUD:WaitForChild("AutoOxygenPrompt", 3) :: Frame?
 local autoO2BuyBtn = autoO2 and autoO2:FindFirstChild("BuyButton") :: TextButton?
 local hasAutoPromptedO2 = false
@@ -100,7 +96,6 @@ local bossBar = MainHUD:WaitForChild("BossBarContainer", 3) :: Frame?
 local bossBarFill = bossBar and bossBar:FindFirstChild("BarBg") and bossBar.BarBg:FindFirstChild("Fill") :: Frame?
 local bossHPText = bossBar and bossBar:FindFirstChild("BarBg") and bossBar.BarBg:FindFirstChild("HPText") :: TextLabel?
 
--- Combat Action Bar
 local actionBar = MainHUD:WaitForChild("CombatActionBar", 3) :: Frame?
 local slotAttack = actionBar and actionBar:FindFirstChild("Slot_Attack") :: Frame?
 local slotAttackToolIcon = slotAttack and slotAttack:FindFirstChild("ToolIcon") :: ImageLabel?
@@ -110,7 +105,6 @@ local slotAttackAction = slotAttack and slotAttack:FindFirstChild("ActionLabel")
 local slotAbility = actionBar and actionBar:FindFirstChild("Slot_Ability") :: Frame?
 local slotDodge = actionBar and actionBar:FindFirstChild("Slot_Dodge") :: Frame?
 
--- Audio Assets
 local sfxCollect = SoundService:WaitForChild("SFX_Collect", 3) :: Sound?
 local sfxSell = SoundService:WaitForChild("SFX_Sell", 3) :: Sound?
 local sfxZoneSwitcher = SoundService:WaitForChild("ZoneSwitcher", 5) :: Sound?
@@ -127,13 +121,12 @@ local function playUIClick()
 	end
 end
 
--- 2D TOOL ASSET CONFIGURATION
 local TOOL_2D_ICONS = {
-	[1] = "rbxassetid://127693503289585", -- Gear_Tool_T1_RustyKnife
-	[2] = "rbxassetid://134893790957976", -- Gear_Tool_T2_SteelSpear
-	[3] = "rbxassetid://80306708713057",  -- Gear_Tool_T3_TitaniumHarpoon
-	[4] = "rbxassetid://110126679421895", -- Gear_Tool_T4_ObsidianWarPick
-	[5] = "rbxassetid://133162210401549", -- Gear_Tool_T5_TridentOfTheDeep
+	[1] = "rbxassetid://127693503289585",
+	[2] = "rbxassetid://134893790957976",
+	[3] = "rbxassetid://80306708713057",
+	[4] = "rbxassetid://110126679421895",
+	[5] = "rbxassetid://133162210401549",
 }
 
 local TOOL_TIER_NAMES = {
@@ -144,7 +137,6 @@ local TOOL_TIER_NAMES = {
 	[5] = "TRIDENT",
 }
 
--- OXYGEN BAR DYNAMIC GRADIENTS
 local O2_NORMAL_GRADIENT = ColorSequence.new({
 	ColorSequenceKeypoint.new(0.00, Color3.fromRGB(15, 135, 230)),
 	ColorSequenceKeypoint.new(0.35, Color3.fromRGB(45, 215, 255)),
@@ -210,7 +202,7 @@ if shopList then
 end
 
 -- ===================================================================
--- 1. HARD UX AUTO-PROMPTS (OXYGEN & REVIVE TOKEN)
+-- 1. HARD UX AUTO-PROMPTS
 -- ===================================================================
 local function showAutoOxygenPrompt()
 	if not autoO2 or autoO2.Visible then return end
@@ -294,8 +286,8 @@ end)
 -- ===================================================================
 -- 2. STORE MODAL & BUTTON
 -- ===================================================================
-local RESPONSIVE_STORE_SIZE = UDim2.fromOffset(680, 520)  -- patched: modals use fixed design size + UIScale
-local MODAL_ZERO_SIZE = UDim2.fromOffset(580, 420)  -- patched: modals use fixed design size + UIScale
+local RESPONSIVE_STORE_SIZE = UDim2.fromOffset(680, 520)
+local MODAL_ZERO_SIZE = UDim2.fromOffset(580, 420)
 
 local ONE_TIME_PURCHASES = { "DeepDiver", "TreasureHunter", "LeviathanPass", "StarterPack" }
 
@@ -605,7 +597,7 @@ local function refreshShopMenu()
 end
 
 local isShopAnimating = false
-local RESPONSIVE_SHOP_SIZE = UDim2.fromOffset(580, 450)  -- patched: modals use fixed design size + UIScale
+local RESPONSIVE_SHOP_SIZE = UDim2.fromOffset(580, 450)
 
 local function openShop()
 	if not shopModal or isShopAnimating or shopModal.Visible then return end
@@ -671,7 +663,7 @@ task.defer(hookShopPrompt)
 -- ===================================================================
 -- 5. PRESTIGE MODAL
 -- ===================================================================
-local RESPONSIVE_PRESTIGE_SIZE = UDim2.fromOffset(580, 420)  -- patched: modals use fixed design size + UIScale
+local RESPONSIVE_PRESTIGE_SIZE = UDim2.fromOffset(580, 420)
 
 local function updatePrestigeButtonState()
 	if not prestigeActionBtn then return end
@@ -761,23 +753,23 @@ local currentToastId = 0
 local function showNotification(message: string, style: string?, icon: string?, isZoneEntry: boolean?)
 	if not toast or not toastMessage then return end
 
+	-- Silences any creature defeat notifications entirely
+	local isKillNotification = (icon == "⚔️") or (string.find(message, "Defeated ") ~= nil)
+	if isKillNotification then return end
+
 	currentToastId += 1
 	local thisToastId = currentToastId
 
 	toastMessage.Text = message
 	if toastIcon then toastIcon.Text = icon or "✨" end
 
-	local isKillNotification = (icon == "⚔️") or (string.find(message, "Defeated ") ~= nil)
 	local isAbilityNotification = (icon == "🛡️") or (string.find(message, "Iron Skin") ~= nil) or (string.find(message, "Special") ~= nil)
 
 	if style == "Success" then
 		if toastStroke then toastStroke.Color = Color3.fromRGB(50, 215, 120) end
-
-		if sfxSell and not isKillNotification and not isAbilityNotification then
+		if sfxSell and not isAbilityNotification then
 			local isSaleToast = string.find(message, "Sold") ~= nil or string.find(message, "Pearls") ~= nil
-			if isSaleToast then
-				sfxSell:Play()
-			end
+			if isSaleToast then sfxSell:Play() end
 		end
 	elseif style == "Warning" then
 		if toastStroke then toastStroke.Color = Color3.fromRGB(255, 130, 60) end
@@ -786,7 +778,7 @@ local function showNotification(message: string, style: string?, icon: string?, 
 		if isZoneEntry then
 			if sfxZoneSwitcher then sfxZoneSwitcher:Play() end
 		else
-			if sfxCollect and not isKillNotification and not isAbilityNotification then
+			if sfxCollect and not isAbilityNotification then
 				sfxCollect:Play()
 			end
 		end
@@ -842,7 +834,6 @@ task.spawn(function()
 	end
 end)
 
--- Dynamic Equip Visual Highlight & Weapon Sync
 local function updateEquippedVisual()
 	local char = LocalPlayer.Character
 	if not char or not slotAttackStroke or not slotAttackAction then return end
@@ -1031,4 +1022,4 @@ task.defer(function()
 	updateToolVisuals(currentData.DivingToolTier or 1)
 end)
 
-print("[Deep Tides] UIController: Active with Container-Aware Currency & Store Resolution.")
+print("[Deep Tides] UIController: Active without creature kill toast clutter.")

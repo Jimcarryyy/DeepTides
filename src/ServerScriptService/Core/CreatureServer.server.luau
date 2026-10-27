@@ -51,6 +51,7 @@ local activeCreatures: { [number]: CreatureInstance } = {}
 local creatureCounter = 0
 local leviathanBoss: CreatureInstance? = nil
 
+-- Spawns the massive golden Leviathan Treasure Vault upon boss defeat
 local function spawnLeviathanVault(seafloorPos: Vector3)
 	local vault = Instance.new("Part")
 	vault.Name = "LeviathanTreasureVault"
@@ -92,6 +93,7 @@ local function spawnLeviathanVault(seafloorPos: Vector3)
 	end)
 end
 
+-- Natural Creature Death Sequence (Belly-up roll, gentle sink/float & 2.2s fade)
 local function playCreatureDeathSequence(model: Model)
 	local prim = model.PrimaryPart
 	if not prim then
@@ -143,7 +145,6 @@ local function applyCreatureDamage(player: Player, baseDamage: number, creatureN
 		NotifyClient:FireClient(player, string.format("Hit by %s! (-%d HP)", creatureName, finalDamage), "Warning", icon)
 	end
 
-	-- Play CreatureAttackImpact SFX at player's position
 	if damageSfxFolder and hrp then
 		local impactSound = damageSfxFolder:FindFirstChild("CreatureAttackImpact") :: Sound?
 		if impactSound then
@@ -304,7 +305,7 @@ end
 task.defer(initAllCreatures)
 
 -- ===================================================================
--- COMBAT SYSTEM (TRUE LINE-OF-SIGHT HIT DETECTION & DEFEAT SFX)
+-- COMBAT SYSTEM (LINE-OF-SIGHT HIT DETECTION & CLEAN SILENT KILLS)
 -- ===================================================================
 local playerAttackCooldowns: { [Player]: number } = {}
 
@@ -379,11 +380,10 @@ AttackRequest.OnServerEvent:Connect(function(player: Player, clientAimDir: any)
 			end)
 		end
 
-		-- CREATURE DEFEAT
+		-- CREATURE DEFEAT (NO TOAST NOTIFICATION - SILENT REWARD ONLY)
 		if closestCreature.Health <= 0 then
 			closestCreature.State = "Dead"
 			local reward = closestCreature.PearlReward
-			local creatureName = closestCreature.Type
 			local cType = closestCreature.Type
 			local bPos = closestCreature.BasePos
 			local deadModel = closestCreature.Model
@@ -401,9 +401,10 @@ AttackRequest.OnServerEvent:Connect(function(player: Player, clientAimDir: any)
 				end
 			end
 
+			-- Silent Reward: Directly adds pearls without screen toast clutter
 			PlayerDataManager.AddPearls(player, reward)
-			NotifyClient:FireClient(player, string.format("Defeated %s! (+%d Pearls)", creatureName, reward), "Success", "⚔️")
 
+			-- World Boss Event Announcement remains exclusive for The Leviathan
 			if cType == "TheLeviathan" then
 				BossHealthUpdate:FireAllClients(0, 1500, false)
 				spawnLeviathanVault(Vector3.new(0, -590, 0))
@@ -575,4 +576,4 @@ RunService.Heartbeat:Connect(function(dt: number)
 	end
 end)
 
-print("[Deep Tides] CreatureServer: Defeat SFX & CreatureAttackImpact active across all zones.")
+print("[Deep Tides] CreatureServer: Defeat SFX active. Kill toast notification removed.")
