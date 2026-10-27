@@ -1,6 +1,6 @@
 --!strict
 -- CombatClient.client.luau
--- R6 Combat Controller: Bold "Press Start 2P" Jumping Damage Numbers, 3D Harpoon Spear, Clickable Action Bar & Custom Crosshairs
+-- R6 Combat Controller: Bold "Press Start 2P" Jumping Damage Numbers (Deal & Take Damage), 3D Harpoon Spear, Clickable Action Bar
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -139,14 +139,13 @@ end
 -- ===================================================================
 -- 2. "PRESS START 2P" JUMPING DAMAGE NUMBER POPUP ENGINE
 -- ===================================================================
-local function spawnDamageNumber(targetPart: BasePart, amount: number)
+local function spawnDamageNumber(targetPart: BasePart, amount: number, customColor: Color3?)
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "DamageIndicator"
 	billboard.Size = UDim2.fromOffset(160, 50)
 	billboard.AlwaysOnTop = true
 	billboard.MaxDistance = 140
 
-	-- Slight random horizontal spread so consecutive hits don't overlap
 	local rx = math.random(-15, 15) / 10
 	local rz = math.random(-15, 15) / 10
 	local initialOffset = Vector3.new(rx, 1.8, rz)
@@ -158,11 +157,10 @@ local function spawnDamageNumber(targetPart: BasePart, amount: number)
 	label.Size = UDim2.fromScale(1, 1)
 	label.BackgroundTransparency = 1
 	label.Text = "-" .. tostring(amount)
-	label.TextColor3 = Color3.fromRGB(255, 235, 45) -- Bright energetic yellow
-	label.TextSize = 14 -- Starts compact for the jump-pop
-	label.Font = Enum.Font.Arcade -- Built-in Roblox enum for Press Start 2P
+	label.TextColor3 = customColor or Color3.fromRGB(255, 235, 45) -- Gold for creature damage, Red for player hurt
+	label.TextSize = 14
+	label.Font = Enum.Font.Arcade
 
-	-- Apply modern FontFace with fallback
 	pcall(function()
 		label.FontFace = Font.fromName("Press Start 2P", Enum.FontWeight.Bold)
 	end)
@@ -175,19 +173,17 @@ local function spawnDamageNumber(targetPart: BasePart, amount: number)
 	label.Parent = billboard
 	billboard.Parent = activeEffectsFolder
 
-	-- Jump Animation: pops upward with spring bounce, floats up and fades
 	local jumpPeakOffset = initialOffset + Vector3.new(0, 3.4, 0)
 	local floatEndOffset = jumpPeakOffset + Vector3.new(0, 1.6, 0)
 
-	-- 1. Jump Pop Arc (Quick snappy expansion)
+	-- Spring Jump Arc
 	TweenService:Create(billboard, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
 		StudsOffset = jumpPeakOffset,
 	}):Play()
 	TweenService:Create(label, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-		TextSize = 32, -- Very large and visible
+		TextSize = 32,
 	}):Play()
 
-	-- 2. Drift Up & Dissolve
 	task.delay(0.28, function()
 		TweenService:Create(billboard, TweenInfo.new(0.48, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
 			StudsOffset = floatEndOffset,
@@ -346,7 +342,7 @@ local function toggleToolEquipped()
 end
 
 -- ===================================================================
--- 5. ANIMATION TRACK MANAGEMENT & LIFECYCLE HOOKS
+-- 5. ANIMATION TRACK MANAGEMENT & DAMAGE LISTENER ON PLAYER
 -- ===================================================================
 local slashTrack1: AnimationTrack? = nil
 local slashTrack2: AnimationTrack? = nil
@@ -418,6 +414,7 @@ end
 
 local function loadTracks(character: Model)
 	local hum = character:WaitForChild("Humanoid", 10) :: Humanoid?
+	local hrp = character:WaitForChild("HumanoidRootPart", 10) :: BasePart?
 	if not hum then return end
 	local animator = hum:WaitForChild("Animator", 10) :: Animator?
 	if not animator then return end
@@ -462,13 +459,25 @@ local function loadTracks(character: Model)
 			playToolUnequipSFX()
 		end
 	end)
+
+	-- DAMAGE DETECTOR ON PLAYER (Spawns Red Jumping Damage Numbers on Body)
+	local previousHealth = hum.Health
+	hum.HealthChanged:Connect(function(newHealth: number)
+		if newHealth < previousHealth - 0.5 then
+			local dmgTaken = math.floor(previousHealth - newHealth + 0.5)
+			if hrp and dmgTaken > 0 then
+				spawnDamageNumber(hrp, dmgTaken, Color3.fromRGB(255, 60, 60))
+			end
+		end
+		previousHealth = newHealth
+	end)
 end
 
 if LocalPlayer.Character then loadTracks(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(loadTracks)
 
 -- ===================================================================
--- 6. 3D HARPOON SPEAR PROJECTILE WITH IMPALE STICKING & DAMAGE POPUP
+-- 6. 3D HARPOON SPEAR PROJECTILE
 -- ===================================================================
 local function spawnHarpoonBullet(startPos: Vector3, direction: Vector3, damageAmount: number)
 	local bullet = harpoonBulletTemplate:Clone()
@@ -521,7 +530,7 @@ local function spawnHarpoonBullet(startPos: Vector3, direction: Vector3, damageA
 						if connection then connection:Disconnect() end
 
 						flashHitmarker()
-						spawnDamageNumber(cRoot, damageAmount)
+						spawnDamageNumber(cRoot, damageAmount, Color3.fromRGB(255, 235, 45))
 						monsterHitSfx.PlaybackSpeed = math.random(95, 105) / 100
 						monsterHitSfx:Play()
 
@@ -631,7 +640,7 @@ local function checkMeleeMonsterHit(hrpPosition: Vector3, damageAmount: number)
 			local root = creature:FindFirstChild("HumanoidRootPart") or creature:FindFirstChildWhichIsA("BasePart")
 			if root and root:IsA("BasePart") and (root.Position - hrpPosition).Magnitude <= 10 then
 				flashHitmarker()
-				spawnDamageNumber(root, damageAmount)
+				spawnDamageNumber(root, damageAmount, Color3.fromRGB(255, 235, 45))
 				monsterHitSfx.PlaybackSpeed = math.random(95, 105) / 100
 				monsterHitSfx:Play()
 				break
@@ -979,4 +988,4 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	end
 end)
 
-print("[Deep Tides] CombatClient: 'Press Start 2P' Jumping Damage Numbers & Clickable Action Bar active.")
+print("[Deep Tides] CombatClient: 'Press Start 2P' Jumping Damage Numbers on Player & Creatures active.")

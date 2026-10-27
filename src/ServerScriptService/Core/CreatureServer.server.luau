@@ -140,9 +140,6 @@ local function applyCreatureDamage(player: Player, baseDamage: number, creatureN
 
 	if typeof(shieldReduction) == "number" and shieldReduction > 0 then
 		finalDamage = math.ceil(baseDamage * (1 - shieldReduction))
-		NotifyClient:FireClient(player, string.format("Shield Absorbed Hit! Took %d dmg from %s", finalDamage, creatureName), "Success", "🛡️")
-	else
-		NotifyClient:FireClient(player, string.format("Hit by %s! (-%d HP)", creatureName, finalDamage), "Warning", icon)
 	end
 
 	if damageSfxFolder and hrp then
@@ -194,6 +191,7 @@ local function spawnJellyfish(pos: Vector3, angleOffset: number)
 	local model = template:Clone()
 	model:PivotTo(CFrame.new(pos))
 	model:SetAttribute("CreatureId", id)
+	model:SetAttribute("CreatureType", "Jellyfish")
 	model.Parent = ActiveCreaturesFolder
 
 	activeCreatures[id] = {
@@ -212,6 +210,7 @@ local function spawnElectricEel(pos: Vector3, angleOffset: number)
 	local model = template:Clone()
 	model:PivotTo(CFrame.new(pos))
 	model:SetAttribute("CreatureId", id)
+	model:SetAttribute("CreatureType", "ElectricEel")
 	model.Parent = ActiveCreaturesFolder
 
 	activeCreatures[id] = {
@@ -230,6 +229,7 @@ local function spawnHammerheadShark(pos: Vector3)
 	local model = template:Clone()
 	model:PivotTo(CFrame.new(pos))
 	model:SetAttribute("CreatureId", id)
+	model:SetAttribute("CreatureType", "HammerheadShark")
 	model.Parent = ActiveCreaturesFolder
 
 	activeCreatures[id] = {
@@ -248,6 +248,7 @@ local function spawnGiantOctopus(pos: Vector3)
 	local model = template:Clone()
 	model:PivotTo(CFrame.new(pos))
 	model:SetAttribute("CreatureId", id)
+	model:SetAttribute("CreatureType", "GiantOctopus")
 	model.Parent = ActiveCreaturesFolder
 
 	activeCreatures[id] = {
@@ -259,13 +260,19 @@ local function spawnGiantOctopus(pos: Vector3)
 	}
 end
 
+-- SPAWN THE LEVIATHAN (Replicates live attributes for Proximity Boss HUD)
 local function spawnTheLeviathan(pos: Vector3)
 	creatureCounter += 1
 	local id = creatureCounter
 	local template = CreatureModels:WaitForChild("TheLeviathan") :: Model
 	local model = template:Clone()
+	model.Name = "TheLeviathan"
 	model:PivotTo(CFrame.new(pos))
 	model:SetAttribute("CreatureId", id)
+	model:SetAttribute("CreatureType", "TheLeviathan")
+	model:SetAttribute("Health", 1500)
+	model:SetAttribute("MaxHealth", 1500)
+	model:SetAttribute("IsAlive", true)
 	model.Parent = ActiveCreaturesFolder
 
 	local bossInstance: CreatureInstance = {
@@ -280,7 +287,7 @@ local function spawnTheLeviathan(pos: Vector3)
 	leviathanBoss = bossInstance
 
 	BossHealthUpdate:FireAllClients(1500, 1500, true)
-	print("[Boss] The Leviathan has spawned in Zone 5 (Depth: -540)!")
+	print("[Boss] The Leviathan spawned in Zone 5 (Name & Attributes replicated)!")
 end
 
 local function initAllCreatures()
@@ -305,7 +312,7 @@ end
 task.defer(initAllCreatures)
 
 -- ===================================================================
--- COMBAT SYSTEM (LINE-OF-SIGHT HIT DETECTION & CLEAN SILENT KILLS)
+-- COMBAT SYSTEM (LINE-OF-SIGHT HIT DETECTION & ATTRIBUTE SYNC)
 -- ===================================================================
 local playerAttackCooldowns: { [Player]: number } = {}
 
@@ -363,12 +370,16 @@ AttackRequest.OnServerEvent:Connect(function(player: Player, clientAimDir: any)
 
 	if closestCreature then
 		closestCreature.Health -= toolConfig.Damage
+		local currentHealth = math.max(0, closestCreature.Health)
+
 		print(string.format("[Combat] %s hit %s for %d damage! (HP: %d/%d) from %.1f studs", 
-			player.Name, closestCreature.Type, toolConfig.Damage, math.max(0, closestCreature.Health), closestCreature.MaxHealth, closestDist
+			player.Name, closestCreature.Type, toolConfig.Damage, currentHealth, closestCreature.MaxHealth, closestDist
 		))
 
+		-- Update Leviathan attributes for Proximity Boss HUD
 		if closestCreature.Type == "TheLeviathan" then
-			BossHealthUpdate:FireAllClients(math.max(0, closestCreature.Health), closestCreature.MaxHealth, true)
+			closestCreature.Model:SetAttribute("Health", currentHealth)
+			BossHealthUpdate:FireAllClients(currentHealth, closestCreature.MaxHealth, true)
 		end
 
 		local prim = closestCreature.Model.PrimaryPart
@@ -380,7 +391,7 @@ AttackRequest.OnServerEvent:Connect(function(player: Player, clientAimDir: any)
 			end)
 		end
 
-		-- CREATURE DEFEAT (NO TOAST NOTIFICATION - SILENT REWARD ONLY)
+		-- CREATURE DEFEAT
 		if closestCreature.Health <= 0 then
 			closestCreature.State = "Dead"
 			local reward = closestCreature.PearlReward
@@ -388,6 +399,11 @@ AttackRequest.OnServerEvent:Connect(function(player: Player, clientAimDir: any)
 			local bPos = closestCreature.BasePos
 			local deadModel = closestCreature.Model
 			local deadPrim = deadModel.PrimaryPart
+
+			if cType == "TheLeviathan" then
+				deadModel:SetAttribute("Health", 0)
+				deadModel:SetAttribute("IsAlive", false)
+			end
 
 			-- Play Unique Creature Defeat Sound (3D Spatial Audio)
 			if defeatSfxFolder and deadPrim then
@@ -401,10 +417,8 @@ AttackRequest.OnServerEvent:Connect(function(player: Player, clientAimDir: any)
 				end
 			end
 
-			-- Silent Reward: Directly adds pearls without screen toast clutter
 			PlayerDataManager.AddPearls(player, reward)
 
-			-- World Boss Event Announcement remains exclusive for The Leviathan
 			if cType == "TheLeviathan" then
 				BossHealthUpdate:FireAllClients(0, 1500, false)
 				spawnLeviathanVault(Vector3.new(0, -590, 0))
@@ -576,4 +590,4 @@ RunService.Heartbeat:Connect(function(dt: number)
 	end
 end)
 
-print("[Deep Tides] CreatureServer: Defeat SFX active. Kill toast notification removed.")
+print("[Deep Tides] CreatureServer: Leviathan attributes active across Zone 5 arena.")
